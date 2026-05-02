@@ -13,7 +13,7 @@ const PRODUCTS = [
   { id: 12, name: "Wireless Mouse", category: "Input", desc: "Precision tracking, ergonomic design. 18-month battery.", price: 44.99, rating: 4.5, reviews: 389, emoji: "🖐️", discount: 18 },
 ];
 
-const cart = {};
+const cart = JSON.parse(localStorage.getItem("cart") || "{}");
 const wishlist = new Set(JSON.parse(localStorage.getItem("wishlist") || "[]"));
 
 const $ = id => document.getElementById(id);
@@ -88,8 +88,10 @@ function renderProducts() {
       </article>
     `;
   }).join("");
+}
 
-  // Event delegation
+function initGridEvents() {
+  const grid = $("products");
   grid.addEventListener("click", e => {
     const card = e.target.closest(".product-card");
     const addBtn = e.target.closest(".add-btn");
@@ -147,6 +149,46 @@ function applyFilters() {
   renderProducts();
 }
 
+const CATEGORY_ICONS = {
+  "Audio": "🎵",
+  "Input": "⌨️",
+  "Power": "⚡",
+  "Wearable": "⌚",
+  "Lighting": "💡",
+  "Video": "📹",
+  "Connectivity": "🔌",
+  "Accessories": "📱",
+};
+
+function setCategory(value) {
+  $("categoryFilter").value = value;
+  document.querySelectorAll(".category-pill").forEach(pill => {
+    pill.classList.toggle("active", pill.dataset.value === value);
+  });
+  applyFilters();
+}
+
+function initCategoryPills() {
+  const categories = [...new Set(PRODUCTS.map(p => p.category))].sort();
+  const container = $("categoryPills");
+
+  const allPill = document.createElement("button");
+  allPill.className = "category-pill active";
+  allPill.dataset.value = "";
+  allPill.innerHTML = `<span class="pill-icon">🛍️</span><span>All</span>`;
+  allPill.addEventListener("click", () => setCategory(""));
+  container.appendChild(allPill);
+
+  categories.forEach(cat => {
+    const pill = document.createElement("button");
+    pill.className = "category-pill";
+    pill.dataset.value = cat;
+    pill.innerHTML = `<span class="pill-icon">${CATEGORY_ICONS[cat] || "📦"}</span><span>${cat}</span>`;
+    pill.addEventListener("click", () => setCategory(cat));
+    container.appendChild(pill);
+  });
+}
+
 // Populate category filter
 function initFilters() {
   const categories = [...new Set(PRODUCTS.map(p => p.category))].sort();
@@ -159,7 +201,9 @@ function initFilters() {
   });
 
   $("searchInput").addEventListener("input", applyFilters);
-  $("categoryFilter").addEventListener("change", applyFilters);
+  $("categoryFilter").addEventListener("change", e => {
+    setCategory(e.target.value);
+  });
   $("priceFilter").addEventListener("change", applyFilters);
   $("sortSelect").addEventListener("change", applyFilters);
 }
@@ -372,7 +416,12 @@ function renderCart() {
   $("cartTotal").textContent = fmt(total);
 }
 
+function saveCart() {
+  localStorage.setItem("cart", JSON.stringify(cart));
+}
+
 function updateCartUI() {
+  saveCart();
   const count = cartCount();
   $("cartCount").textContent = count;
   $("cartCount").style.display = count === 0 ? "none" : "flex";
@@ -420,6 +469,8 @@ document.querySelector(".checkout-btn")?.addEventListener("click", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 initFilters();
+initCategoryPills();
+initGridEvents();
 renderProducts();
 updateWishlistUI();
 updateCartUI();
