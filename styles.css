@@ -96,6 +96,45 @@ body {
   font-size: 1.05rem;
 }
 
+/* ── Category bar ── */
+.category-bar {
+  max-width: 1200px;
+  margin: 0 auto 8px;
+  padding: 0 24px;
+}
+.category-pills {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.category-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 40px;
+  background: white;
+  color: var(--text);
+  font-size: .9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.category-pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.category-pill.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: white;
+}
+.pill-icon {
+  font-size: 1rem;
+}
+
 /* ── Controls ── */
 .controls {
   max-width: 1200px;

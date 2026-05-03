@@ -1,18 +1,18 @@
 # SimpleShop – A Modern Storefront App
 
-A lightweight, vanilla JavaScript e-commerce storefront with product browsing, filtering, cart management, and wishlist functionality. No build tools or dependencies required — just open and use.
+A lightweight e-commerce storefront with a vanilla JS frontend and a Node.js/Express backend. Supports product browsing, filtering, cart management, and wishlist — all backed by a REST API with session-based state.
 
 ## Features
 
 ### 🛍️ Product Catalog
-- **12 curated products** across 6 categories (Audio, Input, Power, Wearable, Lighting, Video, Connectivity, Accessories)
+- **12 curated products** across 8 categories (Audio, Input, Power, Wearable, Lighting, Video, Connectivity, Accessories)
 - **Product cards** with emoji thumbnails, names, descriptions, ratings, and review counts
 - **Discount badges** showing percentage off for items on sale
 - **Star ratings** (1–5 stars) with half-star support
 
 ### 🔍 Search & Filtering
-- **Live search** across product names and descriptions
-- **Category filter** to browse by product type
+- **Live search** across product names and descriptions (server-side)
+- **Category pills** for quick one-click category browsing
 - **Price ranges** (Under $50, $50–$150, $150+)
 - **Sorting options**: Most Popular, Price (Low–High / High–Low), Top Rated
 
@@ -20,116 +20,91 @@ A lightweight, vanilla JavaScript e-commerce storefront with product browsing, f
 - **Add to cart** with visual feedback ("Added!" confirmation)
 - **Quantity controls** (+ / − buttons) in the cart drawer
 - **Dynamic total** calculation with discounted prices
-- **Persistent cart state** during the session
-- **Free shipping notice** on orders over $50
+- **Session-persistent cart** — state lives on the server
 
 ### ❤️ Wishlist
-- **Add/remove items** to wishlist with heart icon toggle
-- **Persistent storage** via browser localStorage
-- **Dedicated wishlist drawer** to view saved items
-- **Wishlist count** in the header
+- **Toggle wishlist** with heart icon on any product or modal
+- **Dedicated wishlist drawer** to view and manage saved items
+- **Wishlist count** badge in the header
 
 ### 📱 Product Details Modal
 - **Click any product** to view full details in a modal
-- **Large emoji thumbnail**, full description, and specs
-- **Quick add to cart** from the detail view
+- **Large emoji thumbnail**, full description, and specs table
+- **Quick add to cart** and wishlist toggle from the detail view
 
 ### 🎨 Design
 - **Responsive grid layout** that adapts from mobile to desktop
 - **Smooth animations** and hover effects
-- **Accessible UI** with ARIA labels and semantic HTML
 - **Dark header** with accent colors for CTAs
 
 ## Getting Started
 
-### Installation
-No installation required! Simply open `index.html` in any modern web browser:
+### Prerequisites
+- Node.js 18+
+
+### Installation & Running
 
 ```bash
-# Option 1: Double-click the file
-open index.html
-
-# Option 2: Use a local server (recommended)
-python3 -m http.server 8000
-# Then visit http://localhost:8000
+cd backend
+npm install        # first time only
+npm run dev        # starts with --watch (auto-restarts on changes)
 ```
 
-> **Note:** Some browsers restrict localStorage in `file://` protocol. Use a local server for full functionality.
+Visit `http://localhost:3000`. Override the port with `PORT=8080 npm start`.
+
+The backend serves both the API and the frontend static files — no separate frontend server needed.
 
 ## File Structure
 
 ```
 .
-├── index.html          # HTML structure with modals and drawers
-├── styles.css          # All styling and responsive design
-├── app.js              # Product logic, cart, wishlist, filtering
-└── README.md           # This file
+├── index.html              # App shell — modals, drawers, layout
+├── styles.css              # All styling and responsive design
+├── app.js                  # Frontend logic — API calls, rendering, events
+├── backend/
+│   ├── server.js           # Express app setup, session config, static serving
+│   ├── package.json
+│   ├── data/
+│   │   └── products.js     # Product catalogue (source of truth)
+│   └── routes/
+│       ├── products.js     # GET /api/products, GET /api/products/:id
+│       ├── cart.js         # GET/POST /api/cart, PUT/DELETE /api/cart/:id
+│       ├── wishlist.js     # GET /api/wishlist, POST /api/wishlist/:id
+│       └── checkout.js     # POST /api/checkout
+└── README.md
 ```
 
-## How to Use
+## API Reference
 
-### Browse Products
-1. View the full catalog on the homepage
-2. Use the search bar to find specific items
-3. Filter by category, price range, or sort by rating/price
-4. Click any product card to see full details in a modal
-
-### Shopping
-1. Click **"Add"** on a product card (or from the detail modal)
-2. See your cart count update in the header
-3. Click the **cart icon** to open the cart drawer
-4. Adjust quantities with + / − buttons
-5. Review the total (accounts for discounts and free shipping info)
-6. Click **"Checkout"** to place your order (demo)
-
-### Wishlist
-1. Click the **heart icon** (♡) on any product to save it
-2. Click the **heart icon in the header** to view your wishlist
-3. Wishlist is saved automatically to your browser
-
-## Product Data
-
-Each product includes:
-- **ID** – Unique identifier
-- **Name** – Product title
-- **Category** – Type of product
-- **Description** – Short feature summary
-- **Price** – Original price
-- **Discount** – Percentage off (0–30%)
-- **Rating** – Customer rating (4.2–4.9 stars)
-- **Reviews** – Number of customer reviews
-- **Emoji** – Visual thumbnail
-
-### Sample Products
-- 🎧 Wireless Headphones – $79.99 (15% off)
-- ⌨️ Mechanical Keyboard – $129.00
-- 🔋 Portable Charger – $39.99 (20% off)
-- ⌚ Smart Watch – $199.00
-- 💡 Desk Lamp – $34.99 (25% off)
-- 📷 Webcam 4K – $89.00 (10% off)
-- 🖱️ Mouse Pad XL – $24.99
-- 🔌 USB-C Hub – $49.99
-- 🔊 Bluetooth Speaker – $59.99 (15% off)
-- 📱 Phone Stand – $14.99 (30% off)
-- 🔗 USB-C Cable – $9.99
-- 🖐️ Wireless Mouse – $44.99 (18% off)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/products` | List products. Accepts `?search=`, `?category=`, `?price=0-50`, `?sort=price-asc\|price-desc\|rating` |
+| GET | `/api/products/:id` | Single product |
+| GET | `/api/cart` | Get cart (`{ items, count, total }`) |
+| POST | `/api/cart` | Add item (`{ productId }`) |
+| PUT | `/api/cart/:productId` | Update quantity (`{ quantity }`) |
+| DELETE | `/api/cart/:productId` | Remove item |
+| DELETE | `/api/cart` | Clear cart |
+| GET | `/api/wishlist` | Get wishlist items (full product objects) |
+| POST | `/api/wishlist/:productId` | Toggle wishlist — returns `{ inWishlist, wishlistIds }` |
+| POST | `/api/checkout` | Clears cart, returns `{ success, total }` |
 
 ## Customization
 
 ### Edit Products
-Open `app.js` and modify the `PRODUCTS` array:
+Modify `backend/data/products.js`:
 
 ```javascript
 { 
-  id: 1, 
-  name: "Product Name", 
+  id: 13,
+  name: "Product Name",
   category: "Category",
   desc: "Short description",
   price: 99.99,
   rating: 4.8,
   reviews: 342,
   emoji: "🎧",
-  discount: 15
+  discount: 15    // percentage off; 0 = no discount
 }
 ```
 
@@ -138,55 +113,20 @@ Edit CSS variables in `styles.css`:
 
 ```css
 :root {
-  --brand: #1a1a2e;      /* Primary color */
-  --accent: #e94560;     /* Highlight color */
-  --bg: #f5f5f7;         /* Background */
-  --text: #111;          /* Text color */
+  --brand:  #1a1a2e;   /* dark header */
+  --accent: #e94560;   /* CTAs, wishlist active */
+  --bg:     #f5f5f7;
+  --text:   #111;
 }
 ```
 
-### Modify Filters
-Update filter ranges in `index.html`:
-
-```html
-<option value="0-100">Under $100</option>
-```
-
-And adjust the corresponding logic in `app.js`.
-
-## Browser Support
-
-Works on all modern browsers (Chrome, Firefox, Safari, Edge):
-- ES6+ JavaScript
-- CSS Grid & Flexbox
-- localStorage API
-- SVG (inline icons)
-
 ## Technical Highlights
 
-- **Zero dependencies** – Vanilla JavaScript, no frameworks
-- **No build step** – Direct HTML/CSS/JS execution
-- **localStorage** – Persistent wishlist across sessions
-- **Event delegation** – Efficient DOM event handling
-- **Responsive design** – `clamp()` and CSS Grid for fluid layout
-- **Accessible** – Semantic HTML, ARIA labels, keyboard navigation
-
-## Demo Features
-
-- Click "Checkout" to see an order confirmation (clears cart)
-- Search for "keyboard" to filter products
-- Add items to wishlist and refresh — they persist
-- Open the developer console to inspect cart/wishlist state
-
-## Future Enhancements
-
-- User accounts and saved carts
-- Product images (real or placeholder service)
-- Customer reviews and ratings submission
-- Coupon codes and promo discounts
-- Order history
-- Analytics tracking
-- Payment gateway integration
+- **Vanilla JS frontend** — no framework, no bundler
+- **Express backend** with `express-session` for per-user cart and wishlist
+- **Server-side filtering** — search, category, price, and sort all handled by the API
+- **Event delegation** — efficient DOM event handling on product grid, cart, and wishlist
+- **Responsive design** — `clamp()` and CSS Grid for fluid layout
 
 ## License
 
