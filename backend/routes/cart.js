@@ -1,22 +1,29 @@
 const express = require('express');
 const router = express.Router();
-const PRODUCTS = require('../data/products');
+const db = require('../db/database');
+
+const getProduct = db.prepare('SELECT * FROM products WHERE id = ?');
+const getCartItems = db.prepare('SELECT product_id, quantity FROM cart_items WHERE session_id = ?');
+const upsertCartItem = db.prepare(`
+  INSERT INTO cart_items (session_id, product_id, quantity)
+  VALUES (?, ?, ?)
+  ON CONFLICT(session_id, product_id) DO UPDATE SET quantity = excluded.quantity
+`);
+const deleteCartItem = db.prepare('DELETE FROM cart_items WHERE session_id = ? AND product_id = ?');
+const clearCart = db.prepare('DELETE FROM cart_items WHERE session_id = ?');
 
 function discountedPrice(p) {
   return p.price * (1 - p.discount / 100);
 }
 
-function buildCartResponse(sessionCart) {
-  const raw = sessionCart || {};
-  const items = Object.entries(raw)
-    .filter(([, qty]) => qty > 0)
-    .map(([id, quantity]) => {
-      const product = PRODUCTS.find(p => p.id === +id);
-      if (!product) return null;
-      const unitPrice = discountedPrice(product);
-      return { product, quantity, unitPrice, subtotal: unitPrice * quantity };
-    })
-    .filter(Boolean);
+function buildCartResponse(sessionId) {
+  const rows = getCartItems.all(sessionId);
+  const items = rows.map(row => {
+    const product = getProduct.get(row.product_id);
+    if (!product) return null;
+    const unitPrice = discountedPrice(product);
+    return { product, quantity: row.quantity, unitPrice, subtotal: unitPrice * row.quantity };
+  }).filter(Boolean);
 
   const count = items.reduce((s, i) => s + i.quantity, 0);
   const total = items.reduce((s, i) => s + i.subtotal, 0);
@@ -24,43 +31,43 @@ function buildCartResponse(sessionCart) {
 }
 
 router.get('/', (req, res) => {
-  res.json(buildCartResponse(req.session.cart));
+  res.json(buildCartResponse(req.session.id));
 });
 
 router.post('/', (req, res) => {
   const { productId } = req.body;
-  const product = PRODUCTS.find(p => p.id === +productId);
+  const product = getProduct.get(+productId);
   if (!product) return res.status(404).json({ error: 'Product not found' });
 
-  if (!req.session.cart) req.session.cart = {};
-  req.session.cart[productId] = (req.session.cart[productId] || 0) + 1;
+  const existing = db.prepare('SELECT quantity FROM cart_items WHERE session_id = ? AND product_id = ?')
+    .get(req.session.id, +productId);
+  const newQty = (existing ? existing.quantity : 0) + 1;
+  upsertCartItem.run(req.session.id, +productId, newQty);
 
-  res.json(buildCartResponse(req.session.cart));
+  res.json(buildCartResponse(req.session.id));
 });
 
 router.put('/:productId', (req, res) => {
-  const { productId } = req.params;
+  const productId = +req.params.productId;
   const { quantity } = req.body;
 
-  if (!req.session.cart) req.session.cart = {};
-
   if (quantity <= 0) {
-    delete req.session.cart[productId];
+    deleteCartItem.run(req.session.id, productId);
   } else {
-    req.session.cart[productId] = quantity;
+    upsertCartItem.run(req.session.id, productId, quantity);
   }
 
-  res.json(buildCartResponse(req.session.cart));
+  res.json(buildCartResponse(req.session.id));
 });
 
 router.delete('/:productId', (req, res) => {
-  if (req.session.cart) delete req.session.cart[req.params.productId];
-  res.json(buildCartResponse(req.session.cart));
+  deleteCartItem.run(req.session.id, +req.params.productId);
+  res.json(buildCartResponse(req.session.id));
 });
 
 router.delete('/', (req, res) => {
-  req.session.cart = {};
-  res.json(buildCartResponse(req.session.cart));
+  clearCart.run(req.session.id);
+  res.json(buildCartResponse(req.session.id));
 });
 
 module.exports = router;

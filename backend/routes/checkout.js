@@ -1,20 +1,47 @@
 const express = require('express');
 const router = express.Router();
-const PRODUCTS = require('../data/products');
+const db = require('../db/database');
+
+const getCartItems = db.prepare('SELECT product_id, quantity FROM cart_items WHERE session_id = ?');
+const getProduct = db.prepare('SELECT * FROM products WHERE id = ?');
+const insertOrder = db.prepare('INSERT INTO orders (session_id, total) VALUES (?, ?)');
+const insertOrderItem = db.prepare(
+  'INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (?, ?, ?, ?)'
+);
+const clearCart = db.prepare('DELETE FROM cart_items WHERE session_id = ?');
 
 function discountedPrice(p) {
   return p.price * (1 - p.discount / 100);
 }
 
 router.post('/', (req, res) => {
-  const cart = req.session.cart || {};
-  const total = Object.entries(cart).reduce((sum, [id, qty]) => {
-    const p = PRODUCTS.find(p => p.id === +id);
-    return p ? sum + discountedPrice(p) * qty : sum;
-  }, 0);
+  const sessionId = req.session.id;
+  const rows = getCartItems.all(sessionId);
 
-  req.session.cart = {};
-  res.json({ success: true, total });
+  if (rows.length === 0) {
+    return res.status(400).json({ error: 'Cart is empty' });
+  }
+
+  let total = 0;
+  const lineItems = rows.map(row => {
+    const product = getProduct.get(row.product_id);
+    if (!product) return null;
+    const unitPrice = discountedPrice(product);
+    total += unitPrice * row.quantity;
+    return { productId: row.product_id, quantity: row.quantity, unitPrice };
+  }).filter(Boolean);
+
+  const placeOrder = db.transaction(() => {
+    const { lastInsertRowid: orderId } = insertOrder.run(sessionId, total);
+    for (const item of lineItems) {
+      insertOrderItem.run(orderId, item.productId, item.quantity, item.unitPrice);
+    }
+    clearCart.run(sessionId);
+    return orderId;
+  });
+
+  const orderId = placeOrder();
+  res.json({ success: true, orderId, total });
 });
 
 module.exports = router;

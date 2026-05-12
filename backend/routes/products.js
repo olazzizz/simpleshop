@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const PRODUCTS = require('../data/products');
+const db = require('../db/database');
 
 function discountedPrice(p) {
   return p.price * (1 - p.discount / 100);
@@ -9,18 +9,21 @@ function discountedPrice(p) {
 router.get('/', (req, res) => {
   const { search, category, price, sort } = req.query;
 
-  let results = [...PRODUCTS];
+  let query = 'SELECT * FROM products WHERE 1=1';
+  const params = [];
 
   if (search) {
-    const q = search.toLowerCase();
-    results = results.filter(p =>
-      p.name.toLowerCase().includes(q) || p.desc.toLowerCase().includes(q)
-    );
+    query += ' AND (LOWER(name) LIKE ? OR LOWER(desc) LIKE ?)';
+    const q = `%${search.toLowerCase()}%`;
+    params.push(q, q);
   }
 
   if (category) {
-    results = results.filter(p => p.category === category);
+    query += ' AND category = ?';
+    params.push(category);
   }
+
+  let results = db.prepare(query).all(...params);
 
   if (price) {
     const [min, max] = price.split('-').map(Number);
@@ -38,7 +41,7 @@ router.get('/', (req, res) => {
 });
 
 router.get('/:id', (req, res) => {
-  const p = PRODUCTS.find(p => p.id === +req.params.id);
+  const p = db.prepare('SELECT * FROM products WHERE id = ?').get(+req.params.id);
   if (!p) return res.status(404).json({ error: 'Product not found' });
   res.json(p);
 });

@@ -2,6 +2,9 @@ const express = require('express');
 const session = require('express-session');
 const path = require('path');
 
+// Initialize database (creates file, schema, and seeds products on first run)
+require('./db/database');
+
 const app = express();
 
 app.use(express.json());
