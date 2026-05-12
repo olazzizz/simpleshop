@@ -1,32 +1,36 @@
 const express = require('express');
 const router = express.Router();
-const PRODUCTS = require('../data/products');
+const db = require('../db/database');
+
+const getProduct = db.prepare('SELECT * FROM products WHERE id = ?');
+const getWishlist = db.prepare('SELECT product_id FROM wishlist_items WHERE session_id = ?');
+const addToWishlist = db.prepare('INSERT OR IGNORE INTO wishlist_items (session_id, product_id) VALUES (?, ?)');
+const removeFromWishlist = db.prepare('DELETE FROM wishlist_items WHERE session_id = ? AND product_id = ?');
+const isInWishlist = db.prepare('SELECT 1 FROM wishlist_items WHERE session_id = ? AND product_id = ?');
 
 router.get('/', (req, res) => {
-  const ids = req.session.wishlist || [];
-  const items = ids.map(id => PRODUCTS.find(p => p.id === id)).filter(Boolean);
+  const rows = getWishlist.all(req.session.id);
+  const items = rows.map(r => getProduct.get(r.product_id)).filter(Boolean);
   res.json(items);
 });
 
 router.post('/:productId', (req, res) => {
   const id = +req.params.productId;
-  if (!PRODUCTS.find(p => p.id === id)) {
+  if (!getProduct.get(id)) {
     return res.status(404).json({ error: 'Product not found' });
   }
 
-  if (!req.session.wishlist) req.session.wishlist = [];
-
-  const idx = req.session.wishlist.indexOf(id);
   let inWishlist;
-  if (idx === -1) {
-    req.session.wishlist.push(id);
-    inWishlist = true;
-  } else {
-    req.session.wishlist.splice(idx, 1);
+  if (isInWishlist.get(req.session.id, id)) {
+    removeFromWishlist.run(req.session.id, id);
     inWishlist = false;
+  } else {
+    addToWishlist.run(req.session.id, id);
+    inWishlist = true;
   }
 
-  res.json({ inWishlist, wishlistIds: req.session.wishlist });
+  const wishlistIds = getWishlist.all(req.session.id).map(r => r.product_id);
+  res.json({ inWishlist, wishlistIds });
 });
 
 module.exports = router;
