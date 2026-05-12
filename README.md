@@ -1,6 +1,6 @@
 # SimpleShop – A Modern Storefront App
 
-A lightweight e-commerce storefront with a vanilla JS frontend and a Node.js/Express backend. Supports product browsing, filtering, cart management, and wishlist — all backed by a REST API with session-based state.
+A lightweight e-commerce storefront with a vanilla JS frontend and a Node.js/Express backend. Supports product browsing, filtering, cart management, and wishlist — all backed by a REST API with SQLite-persisted state.
 
 ## Features
 
@@ -20,12 +20,13 @@ A lightweight e-commerce storefront with a vanilla JS frontend and a Node.js/Exp
 - **Add to cart** with visual feedback ("Added!" confirmation)
 - **Quantity controls** (+ / − buttons) in the cart drawer
 - **Dynamic total** calculation with discounted prices
-- **Session-persistent cart** — state lives on the server
+- **Persistent cart** — survives server restarts via SQLite
 
 ### ❤️ Wishlist
 - **Toggle wishlist** with heart icon on any product or modal
 - **Dedicated wishlist drawer** to view and manage saved items
 - **Wishlist count** badge in the header
+- **Persistent wishlist** — survives server restarts via SQLite
 
 ### 📱 Product Details Modal
 - **Click any product** to view full details in a modal
@@ -54,6 +55,8 @@ Visit `http://localhost:3000`. Override the port with `PORT=8080 npm start`.
 
 The backend serves both the API and the frontend static files — no separate frontend server needed.
 
+On first start, the SQLite database is created automatically at `backend/db/simpleshop.db` and seeded with the product catalogue.
+
 ## File Structure
 
 ```
@@ -65,7 +68,9 @@ The backend serves both the API and the frontend static files — no separate fr
 │   ├── server.js           # Express app setup, session config, static serving
 │   ├── package.json
 │   ├── data/
-│   │   └── products.js     # Product catalogue (source of truth)
+│   │   └── products.js     # Product catalogue (seed data)
+│   ├── db/
+│   │   └── database.js     # SQLite setup, schema, and product seeding
 │   └── routes/
 │       ├── products.js     # GET /api/products, GET /api/products/:id
 │       ├── cart.js         # GET/POST /api/cart, PUT/DELETE /api/cart/:id
@@ -73,6 +78,28 @@ The backend serves both the API and the frontend static files — no separate fr
 │       └── checkout.js     # POST /api/checkout
 └── README.md
 ```
+
+## Database
+
+SimpleShop uses **SQLite** (via `better-sqlite3`) for data persistence. The database file is created automatically on first run and is excluded from version control.
+
+### Schema
+
+| Table | Purpose |
+|-------|---------|
+| `products` | Product catalogue, seeded from `data/products.js` on startup |
+| `cart_items` | Per-session cart rows (`session_id`, `product_id`, `quantity`) |
+| `wishlist_items` | Per-session wishlist rows (`session_id`, `product_id`) |
+| `orders` | Order header written on checkout (`session_id`, `total`, `created_at`) |
+| `order_items` | Line items per order (`order_id`, `product_id`, `quantity`, `unit_price`) |
+
+### Configuration
+
+| Environment variable | Default | Description |
+|---------------------|---------|-------------|
+| `DB_PATH` | `backend/db/simpleshop.db` | Path to the SQLite database file |
+| `PORT` | `3000` | HTTP port |
+| `SESSION_SECRET` | `simpleshop-dev-secret` | Session signing secret (change in production) |
 
 ## API Reference
 
@@ -87,12 +114,12 @@ The backend serves both the API and the frontend static files — no separate fr
 | DELETE | `/api/cart` | Clear cart |
 | GET | `/api/wishlist` | Get wishlist items (full product objects) |
 | POST | `/api/wishlist/:productId` | Toggle wishlist — returns `{ inWishlist, wishlistIds }` |
-| POST | `/api/checkout` | Clears cart, returns `{ success, total }` |
+| POST | `/api/checkout` | Place order, clear cart — returns `{ success, orderId, total }` |
 
 ## Customization
 
 ### Edit Products
-Modify `backend/data/products.js`:
+Modify `backend/data/products.js` and restart the server — products are upserted into the database on every startup:
 
 ```javascript
 { 
@@ -123,7 +150,8 @@ Edit CSS variables in `styles.css`:
 ## Technical Highlights
 
 - **Vanilla JS frontend** — no framework, no bundler
-- **Express backend** with `express-session` for per-user cart and wishlist
+- **SQLite persistence** — cart, wishlist, and orders survive server restarts; WAL mode enabled for write performance
+- **Express backend** with `express-session` for session ID keying
 - **Server-side filtering** — search, category, price, and sort all handled by the API
 - **Event delegation** — efficient DOM event handling on product grid, cart, and wishlist
 - **Responsive design** — `clamp()` and CSS Grid for fluid layout
