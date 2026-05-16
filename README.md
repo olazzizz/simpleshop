@@ -67,6 +67,7 @@ On first start, the SQLite database is created automatically at `backend/db/simp
 ├── backend/
 │   ├── server.js           # Express app setup, session config, static serving
 │   ├── package.json
+│   ├── Dockerfile          # Container image (UBI9 Node 22)
 │   ├── data/
 │   │   └── products.js     # Product catalogue (seed data)
 │   ├── db/
@@ -76,6 +77,10 @@ On first start, the SQLite database is created automatically at `backend/db/simp
 │       ├── cart.js         # GET/POST /api/cart, PUT/DELETE /api/cart/:id
 │       ├── wishlist.js     # GET /api/wishlist, POST /api/wishlist/:id
 │       └── checkout.js     # POST /api/checkout
+├── k8s/
+│   ├── deployment.yml      # Kubernetes Deployment (1 replica)
+│   ├── service.yml         # ClusterIP Service (port 80 → 3000)
+│   └── secret.yml          # SESSION_SECRET
 └── README.md
 ```
 
@@ -100,6 +105,51 @@ SimpleShop uses **SQLite** (via `better-sqlite3`) for data persistence. The data
 | `DB_PATH` | `backend/db/simpleshop.db` | Path to the SQLite database file |
 | `PORT` | `3000` | HTTP port |
 | `SESSION_SECRET` | `simpleshop-dev-secret` | Session signing secret (change in production) |
+
+## Running with Podman
+
+Build and run the container locally (run from the project root):
+
+```bash
+podman build -t simpleshop:latest -f backend/Dockerfile .
+podman run --rm -p 3000:3000 simpleshop:latest
+```
+
+Visit `http://localhost:3000`.
+
+## Kubernetes Deployment
+
+### 1. Set the session secret
+
+Edit `k8s/secret.yml` and replace the placeholder value:
+
+```yaml
+stringData:
+  SESSION_SECRET: "your-secret-here"
+```
+
+### 2. Push the image to a registry
+
+```bash
+podman tag simpleshop:latest <your-registry>/simpleshop:latest
+podman push <your-registry>/simpleshop:latest
+```
+
+### 3. Update the image reference
+
+In `k8s/deployment.yml`, set the `image` field to match your registry:
+
+```yaml
+image: <your-registry>/simpleshop:latest
+```
+
+### 4. Apply the manifests
+
+```bash
+kubectl apply -f k8s/
+```
+
+This creates the Secret, Deployment, and ClusterIP Service. The app is reachable inside the cluster at `http://simpleshop:80`.
 
 ## API Reference
 

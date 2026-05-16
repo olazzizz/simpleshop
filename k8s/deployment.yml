@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simpleshop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simpleshop
+  template:
+    metadata:
+      labels:
+        app: simpleshop
+    spec:
+      containers:
+        - name: simpleshop
+          image: simpleshop:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: simpleshop-secret
+                  key: SESSION_SECRET
+          readinessProbe:
+            httpGet:
+              path: /api/products
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
