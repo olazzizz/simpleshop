@@ -3,13 +3,31 @@ const path = require('path');
 const PRODUCTS = require('../data/products');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'simpleshop.db');
-
 const db = new Database(DB_PATH);
 
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// Drop session-based tables if migrating to user-based schema
+const hasUsers = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+if (!hasUsers) {
+  db.exec(`
+    DROP TABLE IF EXISTS order_items;
+    DROP TABLE IF EXISTS orders;
+    DROP TABLE IF EXISTS wishlist_items;
+    DROP TABLE IF EXISTS cart_items;
+  `);
+}
+
 db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT    NOT NULL UNIQUE,
+    email         TEXT    NOT NULL UNIQUE,
+    password_hash TEXT    NOT NULL,
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS products (
     id       INTEGER PRIMARY KEY,
     name     TEXT    NOT NULL,
@@ -23,25 +41,28 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS cart_items (
-    session_id TEXT    NOT NULL,
+    user_id    INTEGER NOT NULL,
     product_id INTEGER NOT NULL,
     quantity   INTEGER NOT NULL DEFAULT 1,
-    PRIMARY KEY (session_id, product_id),
+    PRIMARY KEY (user_id, product_id),
+    FOREIGN KEY (user_id)    REFERENCES users(id)    ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id)
   );
 
   CREATE TABLE IF NOT EXISTS wishlist_items (
-    session_id TEXT    NOT NULL,
+    user_id    INTEGER NOT NULL,
     product_id INTEGER NOT NULL,
-    PRIMARY KEY (session_id, product_id),
+    PRIMARY KEY (user_id, product_id),
+    FOREIGN KEY (user_id)    REFERENCES users(id)    ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id)
   );
 
   CREATE TABLE IF NOT EXISTS orders (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT    NOT NULL,
+    user_id    INTEGER NOT NULL,
     total      REAL    NOT NULL,
-    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id)
   );
 
   CREATE TABLE IF NOT EXISTS order_items (
@@ -55,7 +76,6 @@ db.exec(`
   );
 `);
 
-// Seed products (upsert so re-starts don't duplicate)
 const upsertProduct = db.prepare(`
   INSERT INTO products (id, name, category, desc, price, rating, reviews, emoji, discount)
   VALUES (@id, @name, @category, @desc, @price, @rating, @reviews, @emoji, @discount)

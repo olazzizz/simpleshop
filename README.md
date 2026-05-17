@@ -1,6 +1,6 @@
 # SimpleShop – A Modern Storefront App
 
-A lightweight e-commerce storefront with a vanilla JS frontend and a Node.js/Express backend. Supports product browsing, filtering, cart management, and wishlist — all backed by a REST API with SQLite-persisted state.
+A lightweight e-commerce storefront with a vanilla JS frontend and a Node.js/Express backend. Supports user registration and login, product browsing, filtering, cart management, and wishlist — all backed by a REST API with SQLite-persisted state.
 
 ## Features
 
@@ -32,6 +32,13 @@ A lightweight e-commerce storefront with a vanilla JS frontend and a Node.js/Exp
 - **Click any product** to view full details in a modal
 - **Large emoji thumbnail**, full description, and specs table
 - **Quick add to cart** and wishlist toggle from the detail view
+
+### 👤 User Accounts
+- **Register and log in** via a modal with Login / Create Account tabs
+- **Per-user cart and wishlist** — persisted in SQLite and restored on every login
+- **Passwords hashed** with bcrypt before storage
+- **Session-based authentication** — stays logged in across page refreshes for 24 hours
+- **Unauthenticated access** prompts the login modal automatically
 
 ### 🎨 Design
 - **Responsive grid layout** that adapts from mobile to desktop
@@ -72,7 +79,10 @@ On first start, the SQLite database is created automatically at `backend/db/simp
 │   │   └── products.js     # Product catalogue (seed data)
 │   ├── db/
 │   │   └── database.js     # SQLite setup, schema, and product seeding
+│   ├── middleware/
+│   │   └── requireAuth.js  # 401 guard for protected routes
 │   └── routes/
+│       ├── auth.js         # POST /api/auth/register|login|logout, GET /api/auth/me
 │       ├── products.js     # GET /api/products, GET /api/products/:id
 │       ├── cart.js         # GET/POST /api/cart, PUT/DELETE /api/cart/:id
 │       ├── wishlist.js     # GET /api/wishlist, POST /api/wishlist/:id
@@ -92,10 +102,11 @@ SimpleShop uses **SQLite** (via `better-sqlite3`) for data persistence. The data
 
 | Table | Purpose |
 |-------|---------|
+| `users` | Registered users (`username`, `email`, `password_hash`) |
 | `products` | Product catalogue, seeded from `data/products.js` on startup |
-| `cart_items` | Per-session cart rows (`session_id`, `product_id`, `quantity`) |
-| `wishlist_items` | Per-session wishlist rows (`session_id`, `product_id`) |
-| `orders` | Order header written on checkout (`session_id`, `total`, `created_at`) |
+| `cart_items` | Per-user cart rows (`user_id`, `product_id`, `quantity`) |
+| `wishlist_items` | Per-user wishlist rows (`user_id`, `product_id`) |
+| `orders` | Order header written on checkout (`user_id`, `total`, `created_at`) |
 | `order_items` | Line items per order (`order_id`, `product_id`, `quantity`, `unit_price`) |
 
 ### Configuration
@@ -182,10 +193,26 @@ Visit `http://localhost:3000`.
 
 ## API Reference
 
+### Auth (public)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/register` | Create account (`{ username, email, password }`) — returns user object |
+| POST | `/api/auth/login` | Log in (`{ username, password }`) — returns user object |
+| POST | `/api/auth/logout` | Destroy session |
+| GET | `/api/auth/me` | Return current user, or 401 if not logged in |
+
+### Products (public)
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/products` | List products. Accepts `?search=`, `?category=`, `?price=0-50`, `?sort=price-asc\|price-desc\|rating` |
 | GET | `/api/products/:id` | Single product |
+
+### Cart, Wishlist, Checkout (require login)
+
+| Method | Path | Description |
+|--------|------|-------------|
 | GET | `/api/cart` | Get cart (`{ items, count, total }`) |
 | POST | `/api/cart` | Add item (`{ productId }`) |
 | PUT | `/api/cart/:productId` | Update quantity (`{ quantity }`) |
@@ -229,8 +256,9 @@ Edit CSS variables in `styles.css`:
 ## Technical Highlights
 
 - **Vanilla JS frontend** — no framework, no bundler
-- **SQLite persistence** — cart, wishlist, and orders survive server restarts; WAL mode enabled for write performance
-- **Express backend** with `express-session` for session ID keying
+- **User authentication** — bcrypt password hashing, session-based login, 401 interception opens login modal
+- **SQLite persistence** — users, cart, wishlist, and orders survive server restarts; WAL mode enabled for write performance
+- **Express backend** with `express-session`; cart and wishlist keyed by `user_id`
 - **Server-side filtering** — search, category, price, and sort all handled by the API
 - **Event delegation** — efficient DOM event handling on product grid, cart, and wishlist
 - **Responsive design** — `clamp()` and CSS Grid for fluid layout

@@ -2,6 +2,7 @@
 // State
 // ────────────────────────────────────────────────────────────────────────────
 
+let currentUser = null;
 let allProducts = [];
 let products    = [];
 let cart        = { items: [], count: 0, total: 0 };
@@ -20,14 +21,136 @@ async function apiFetch(method, path, body) {
     headers: body ? { 'Content-Type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401) {
+    openAuthModal();
+    throw new Error('401');
+  }
   if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
   return res.json();
 }
 
-const apiGet    = path        => apiFetch('GET',    path);
+const apiGet    = path         => apiFetch('GET',    path);
 const apiPost   = (path, body) => apiFetch('POST',   path, body);
 const apiPut    = (path, body) => apiFetch('PUT',    path, body);
-const apiDelete = path        => apiFetch('DELETE', path);
+const apiDelete = path         => apiFetch('DELETE', path);
+
+// ────────────────────────────────────────────────────────────────────────────
+// Auth
+// ────────────────────────────────────────────────────────────────────────────
+
+async function fetchCurrentUser() {
+  try {
+    const res = await fetch('/api/auth/me');
+    currentUser = res.ok ? await res.json() : null;
+  } catch {
+    currentUser = null;
+  }
+  updateAuthUI();
+}
+
+function updateAuthUI() {
+  const area = $('userArea');
+  if (currentUser) {
+    area.innerHTML = `
+      <span class="user-greeting">Hi, <strong>${currentUser.username}</strong></span>
+      <button class="sign-out-btn" id="signOutBtn">Sign Out</button>
+    `;
+    $('signOutBtn').addEventListener('click', handleLogout);
+  } else {
+    area.innerHTML = `<button class="sign-in-btn" id="signInBtn">Sign In</button>`;
+    $('signInBtn').addEventListener('click', () => openAuthModal());
+  }
+}
+
+function openAuthModal(tab = 'login') {
+  switchAuthTab(tab);
+  $('authModal').classList.add('open');
+  $('authOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeAuthModal() {
+  $('authModal').classList.remove('open');
+  $('authOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+  $('loginError').textContent = '';
+  $('registerError').textContent = '';
+  $('loginForm').reset();
+  $('registerForm').reset();
+}
+
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.tab === tab)
+  );
+  $('loginForm').style.display    = tab === 'login'    ? 'flex' : 'none';
+  $('registerForm').style.display = tab === 'register' ? 'flex' : 'none';
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  $('loginError').textContent = '';
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: $('loginUsername').value.trim(),
+      password: $('loginPassword').value,
+    }),
+  });
+  if (res.ok) {
+    currentUser = await res.json();
+    closeAuthModal();
+    updateAuthUI();
+    await Promise.all([fetchCart(), fetchWishlist()]);
+    renderProducts();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    $('loginError').textContent = data.error || 'Invalid username or password.';
+  }
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  $('registerError').textContent = '';
+  const res = await fetch('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: $('regUsername').value.trim(),
+      email:    $('regEmail').value.trim(),
+      password: $('regPassword').value,
+    }),
+  });
+  if (res.ok) {
+    currentUser = await res.json();
+    closeAuthModal();
+    updateAuthUI();
+    renderProducts();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    $('registerError').textContent = data.error || 'Registration failed. Try a different username or email.';
+  }
+}
+
+async function handleLogout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  currentUser = null;
+  cart = { items: [], count: 0, total: 0 };
+  wishlistIds = new Set();
+  updateAuthUI();
+  updateCartUI();
+  updateWishlistUI([]);
+  renderProducts();
+}
+
+$('closeAuth').addEventListener('click', closeAuthModal);
+$('authOverlay').addEventListener('click', closeAuthModal);
+$('loginForm').addEventListener('submit', handleLogin);
+$('registerForm').addEventListener('submit', handleRegister);
+document.querySelectorAll('.auth-tab').forEach(tab =>
+  tab.addEventListener('click', () => switchAuthTab(tab.dataset.tab))
+);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Utility
@@ -112,20 +235,27 @@ function initGridEvents() {
 
     if (wishBtn) {
       e.stopPropagation();
-      await toggleWishlist(+wishBtn.dataset.id);
-      renderProducts();
+      try {
+        await toggleWishlist(+wishBtn.dataset.id);
+        renderProducts();
+      } catch {}
     } else if (addBtn) {
       e.stopPropagation();
       addBtn.disabled = true;
-      cart = await apiPost('/api/cart', { productId: +addBtn.dataset.id });
-      updateCartUI();
-      addBtn.textContent = "Added!";
-      addBtn.classList.add("added");
-      setTimeout(() => {
+      try {
+        cart = await apiPost('/api/cart', { productId: +addBtn.dataset.id });
+        updateCartUI();
+        addBtn.textContent = "Added!";
+        addBtn.classList.add("added");
+        setTimeout(() => {
+          addBtn.textContent = "Add";
+          addBtn.classList.remove("added");
+          addBtn.disabled = false;
+        }, 900);
+      } catch {
         addBtn.textContent = "Add";
-        addBtn.classList.remove("added");
         addBtn.disabled = false;
-      }, 900);
+      }
     } else if (card) {
       openProductModal(+card.dataset.id);
     }
@@ -240,16 +370,22 @@ function openProductModal(id) {
     const wish = e.target.closest(".modal-wishlist-btn");
     if (btn) {
       btn.disabled = true;
-      cart = await apiPost('/api/cart', { productId: +btn.dataset.id });
-      updateCartUI();
-      btn.textContent  = "Added to cart!";
-      btn.style.opacity = "0.7";
-      setTimeout(closeModal, 500);
+      try {
+        cart = await apiPost('/api/cart', { productId: +btn.dataset.id });
+        updateCartUI();
+        btn.textContent  = "Added to cart!";
+        btn.style.opacity = "0.7";
+        setTimeout(closeModal, 500);
+      } catch {
+        btn.disabled = false;
+      }
     } else if (wish) {
-      const pid = +wish.dataset.id;
-      await toggleWishlist(pid);
-      wish.textContent = wishlistIds.has(pid) ? '♥' : '♡';
-      wish.style.color = wishlistIds.has(pid) ? 'var(--accent)' : 'inherit';
+      try {
+        const pid = +wish.dataset.id;
+        await toggleWishlist(pid);
+        wish.textContent = wishlistIds.has(pid) ? '♥' : '♡';
+        wish.style.color = wishlistIds.has(pid) ? 'var(--accent)' : 'inherit';
+      } catch {}
     }
   }, true);
 }
@@ -339,18 +475,24 @@ $("wishlistItems").addEventListener("click", async e => {
 
   if (addBtn) {
     addBtn.disabled = true;
-    cart = await apiPost('/api/cart', { productId: +addBtn.dataset.id });
-    updateCartUI();
-    addBtn.textContent  = "Added!";
-    addBtn.style.opacity = "0.6";
-    setTimeout(() => {
-      addBtn.textContent   = "Add";
-      addBtn.style.opacity  = "1";
+    try {
+      cart = await apiPost('/api/cart', { productId: +addBtn.dataset.id });
+      updateCartUI();
+      addBtn.textContent  = "Added!";
+      addBtn.style.opacity = "0.6";
+      setTimeout(() => {
+        addBtn.textContent   = "Add";
+        addBtn.style.opacity  = "1";
+        addBtn.disabled = false;
+      }, 800);
+    } catch {
       addBtn.disabled = false;
-    }, 800);
+    }
   } else if (removeBtn) {
-    await toggleWishlist(+removeBtn.dataset.id);
-    renderProducts();
+    try {
+      await toggleWishlist(+removeBtn.dataset.id);
+      renderProducts();
+    } catch {}
   }
 });
 
@@ -422,22 +564,26 @@ $("cartItems").addEventListener("click", async e => {
   const item = cart.items.find(i => i.product.id === +id);
   if (!item) return;
 
-  if (btn.dataset.action === "inc") {
-    cart = await apiPut(`/api/cart/${id}`, { quantity: item.quantity + 1 });
-  } else if (item.quantity > 1) {
-    cart = await apiPut(`/api/cart/${id}`, { quantity: item.quantity - 1 });
-  } else {
-    cart = await apiDelete(`/api/cart/${id}`);
-  }
-  updateCartUI();
+  try {
+    if (btn.dataset.action === "inc") {
+      cart = await apiPut(`/api/cart/${id}`, { quantity: item.quantity + 1 });
+    } else if (item.quantity > 1) {
+      cart = await apiPut(`/api/cart/${id}`, { quantity: item.quantity - 1 });
+    } else {
+      cart = await apiDelete(`/api/cart/${id}`);
+    }
+    updateCartUI();
+  } catch {}
 });
 
 document.querySelector(".checkout-btn")?.addEventListener("click", async () => {
-  const result = await apiPost('/api/checkout');
-  cart = { items: [], count: 0, total: 0 };
-  updateCartUI();
-  closeCart();
-  alert("Order placed! Thanks for shopping at SimpleShop. Order total: " + fmt(result.total));
+  try {
+    const result = await apiPost('/api/checkout');
+    cart = { items: [], count: 0, total: 0 };
+    updateCartUI();
+    closeCart();
+    alert("Order placed! Thanks for shopping at SimpleShop. Order total: " + fmt(result.total));
+  } catch {}
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -445,6 +591,8 @@ document.querySelector(".checkout-btn")?.addEventListener("click", async () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function init() {
+  await fetchCurrentUser();
+
   allProducts = await apiGet('/api/products');
   products    = [...allProducts];
 
@@ -453,7 +601,9 @@ async function init() {
   initGridEvents();
   renderProducts();
 
-  await Promise.all([fetchCart(), fetchWishlist()]);
+  if (currentUser) {
+    await Promise.all([fetchCart(), fetchWishlist()]);
+  }
 }
 
 init().catch(console.error);

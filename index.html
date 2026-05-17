@@ -12,6 +12,7 @@
     <div class="header-inner">
       <a class="logo" href="#">SimpleShop</a>
       <div class="header-actions">
+        <div class="user-area" id="userArea"></div>
         <button class="wishlist-header-btn" id="wishlistBtn" aria-label="View wishlist">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
@@ -66,6 +67,46 @@
       <!-- injected by JS -->
     </section>
   </main>
+
+  <!-- Auth overlay + modal -->
+  <div class="overlay" id="authOverlay"></div>
+  <div class="auth-modal" id="authModal">
+    <button class="modal-close" id="closeAuth">&times;</button>
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-tab="login">Sign In</button>
+      <button class="auth-tab" data-tab="register">Create Account</button>
+    </div>
+
+    <form id="loginForm" class="auth-form">
+      <p class="auth-error" id="loginError"></p>
+      <label class="auth-label">
+        Username
+        <input type="text" id="loginUsername" class="auth-input" autocomplete="username" />
+      </label>
+      <label class="auth-label">
+        Password
+        <input type="password" id="loginPassword" class="auth-input" autocomplete="current-password" />
+      </label>
+      <button type="submit" class="auth-submit-btn">Sign In</button>
+    </form>
+
+    <form id="registerForm" class="auth-form" style="display:none">
+      <p class="auth-error" id="registerError"></p>
+      <label class="auth-label">
+        Username
+        <input type="text" id="regUsername" class="auth-input" autocomplete="username" />
+      </label>
+      <label class="auth-label">
+        Email
+        <input type="email" id="regEmail" class="auth-input" autocomplete="email" />
+      </label>
+      <label class="auth-label">
+        Password
+        <input type="password" id="regPassword" class="auth-input" autocomplete="new-password" />
+      </label>
+      <button type="submit" class="auth-submit-btn">Create Account</button>
+    </form>
+  </div>
 
   <!-- Wishlist drawer -->
   <div class="overlay" id="wishlistOverlay"></div>
