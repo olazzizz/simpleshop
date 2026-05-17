@@ -12,9 +12,11 @@ spec:
       labels:
         app: simpleshop
     spec:
+      imagePullSecrets:
+        - name: quay-pull-secret
       containers:
         - name: simpleshop
-          image: simpleshop:latest
+          image: quay.io/rh-ee-olazzizz/simpleshop:latest
           ports:
             - containerPort: 3000
           env:

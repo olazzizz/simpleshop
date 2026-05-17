@@ -143,13 +143,42 @@ In `k8s/deployment.yml`, set the `image` field to match your registry:
 image: <your-registry>/simpleshop:latest
 ```
 
-### 4. Apply the manifests
+### 4. Create the registry pull secret
+
+The pull secret must be created locally and never committed to version control, as it contains registry credentials.
+
+If you are logged into the registry via Podman, reuse the existing auth file:
+
+```bash
+kubectl create secret generic quay-pull-secret \
+  --from-file=.dockerconfigjson=${XDG_RUNTIME_DIR}/containers/auth.json \
+  --type=kubernetes.io/dockerconfigjson
+```
+
+Otherwise, create it from credentials directly:
+
+```bash
+kubectl create secret docker-registry quay-pull-secret \
+  --docker-server=<your-registry> \
+  --docker-username=<your-username> \
+  --docker-password=<your-password-or-token>
+```
+
+### 5. Apply the manifests
 
 ```bash
 kubectl apply -f k8s/
 ```
 
-This creates the Secret, Deployment, and ClusterIP Service. The app is reachable inside the cluster at `http://simpleshop:80`.
+This creates the Session Secret, Deployment, and ClusterIP Service.
+
+### 6. Access the app
+
+```bash
+kubectl port-forward service/simpleshop 3000:80
+```
+
+Visit `http://localhost:3000`.
 
 ## API Reference
 
