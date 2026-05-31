@@ -1,6 +1,6 @@
 # SimpleShop – A Modern Storefront App
 
-A lightweight e-commerce storefront with a vanilla JS frontend and a Node.js/Express backend. Supports user registration and login, product browsing, filtering, cart management, and wishlist — all backed by a REST API with SQLite-persisted state.
+A lightweight e-commerce storefront with a vanilla JS frontend and a Node.js/Express backend. Supports user registration and login, product browsing, filtering, cart management, and wishlist — all backed by a REST API with PostgreSQL-persisted state.
 
 ## Features
 
@@ -20,13 +20,13 @@ A lightweight e-commerce storefront with a vanilla JS frontend and a Node.js/Exp
 - **Add to cart** with visual feedback ("Added!" confirmation)
 - **Quantity controls** (+ / − buttons) in the cart drawer
 - **Dynamic total** calculation with discounted prices
-- **Persistent cart** — survives server restarts via SQLite
+- **Persistent cart** — survives server restarts via PostgreSQL
 
 ### ❤️ Wishlist
 - **Toggle wishlist** with heart icon on any product or modal
 - **Dedicated wishlist drawer** to view and manage saved items
 - **Wishlist count** badge in the header
-- **Persistent wishlist** — survives server restarts via SQLite
+- **Persistent wishlist** — survives server restarts via PostgreSQL
 
 ### 📱 Product Details Modal
 - **Click any product** to view full details in a modal
@@ -35,7 +35,7 @@ A lightweight e-commerce storefront with a vanilla JS frontend and a Node.js/Exp
 
 ### 👤 User Accounts
 - **Register and log in** via a modal with Login / Create Account tabs
-- **Per-user cart and wishlist** — persisted in SQLite and restored on every login
+- **Per-user cart and wishlist** — persisted in PostgreSQL and restored on every login
 - **Passwords hashed** with bcrypt before storage
 - **Session-based authentication** — stays logged in across page refreshes for 24 hours
 - **Unauthenticated access** prompts the login modal automatically
@@ -49,20 +49,32 @@ A lightweight e-commerce storefront with a vanilla JS frontend and a Node.js/Exp
 
 ### Prerequisites
 - Node.js 18+
+- PostgreSQL 14+ (or use the Docker/Podman container)
 
 ### Installation & Running
+
+Start a local PostgreSQL instance:
+
+```bash
+podman run -d --name pg \
+  -e POSTGRES_DB=simpleshop \
+  -e POSTGRES_USER=simpleshop \
+  -e POSTGRES_PASSWORD=dev \
+  -p 5432:5432 \
+  postgres:16
+```
+
+Then start the backend:
 
 ```bash
 cd backend
 npm install        # first time only
-npm run dev        # starts with --watch (auto-restarts on changes)
+PGPASSWORD=dev npm run dev
 ```
 
 Visit `http://localhost:3000`. Override the port with `PORT=8080 npm start`.
 
-The backend serves both the API and the frontend static files — no separate frontend server needed.
-
-On first start, the SQLite database is created automatically at `backend/db/simpleshop.db` and seeded with the product catalogue.
+The backend serves both the API and the frontend static files — no separate frontend server needed. On first start the schema is created automatically and the product catalogue is seeded.
 
 ## File Structure
 
@@ -71,14 +83,14 @@ On first start, the SQLite database is created automatically at `backend/db/simp
 ├── index.html              # App shell — modals, drawers, layout
 ├── styles.css              # All styling and responsive design
 ├── app.js                  # Frontend logic — API calls, rendering, events
+├── Dockerfile              # Container image (UBI9 Node 22)
 ├── backend/
 │   ├── server.js           # Express app setup, session config, static serving
 │   ├── package.json
-│   ├── Dockerfile          # Container image (UBI9 Node 22)
 │   ├── data/
 │   │   └── products.js     # Product catalogue (seed data)
 │   ├── db/
-│   │   └── database.js     # SQLite setup, schema, and product seeding
+│   │   └── database.js     # PostgreSQL pool, schema creation, product seeding
 │   ├── middleware/
 │   │   └── requireAuth.js  # 401 guard for protected routes
 │   └── routes/
@@ -88,15 +100,16 @@ On first start, the SQLite database is created automatically at `backend/db/simp
 │       ├── wishlist.js     # GET /api/wishlist, POST /api/wishlist/:id
 │       └── checkout.js     # POST /api/checkout
 ├── k8s/
-│   ├── deployment.yml      # Kubernetes Deployment (1 replica)
+│   ├── deployment.yml      # Kubernetes Deployment for the app
 │   ├── service.yml         # ClusterIP Service (port 80 → 3000)
-│   └── secret.yml          # SESSION_SECRET
+│   ├── postgres.yml        # PostgreSQL Deployment, PVC, and ClusterIP Service
+│   └── secret.yml          # SESSION_SECRET and PGPASSWORD
 └── README.md
 ```
 
 ## Database
 
-SimpleShop uses **SQLite** (via `better-sqlite3`) for data persistence. The database file is created automatically on first run and is excluded from version control.
+SimpleShop uses **PostgreSQL** (via the `pg` Node.js client) for data persistence. The schema is created automatically on startup.
 
 ### Schema
 
@@ -113,7 +126,11 @@ SimpleShop uses **SQLite** (via `better-sqlite3`) for data persistence. The data
 
 | Environment variable | Default | Description |
 |---------------------|---------|-------------|
-| `DB_PATH` | `backend/db/simpleshop.db` | Path to the SQLite database file |
+| `PGHOST` | `localhost` | PostgreSQL host |
+| `PGPORT` | `5432` | PostgreSQL port |
+| `PGDATABASE` | `simpleshop` | Database name |
+| `PGUSER` | `simpleshop` | Database user |
+| `PGPASSWORD` | _(none)_ | Database password |
 | `PORT` | `3000` | HTTP port |
 | `SESSION_SECRET` | `simpleshop-dev-secret` | Session signing secret (change in production) |
 
@@ -122,27 +139,33 @@ SimpleShop uses **SQLite** (via `better-sqlite3`) for data persistence. The data
 Build and run the container locally (run from the project root):
 
 ```bash
-podman build -t simpleshop:latest -f backend/Dockerfile .
-podman run --rm -p 3000:3000 simpleshop:latest
+podman build -t simpleshop:latest .
+podman run --rm -p 3000:3000 \
+  -e PGHOST=host.containers.internal \
+  -e PGUSER=simpleshop \
+  -e PGPASSWORD=dev \
+  -e PGDATABASE=simpleshop \
+  simpleshop:latest
 ```
 
-Visit `http://localhost:3000`.
+Visit `http://localhost:3000` (requires a PostgreSQL instance accessible at `host.containers.internal:5432`).
 
 ## Kubernetes Deployment
 
-### 1. Set the session secret
+### 1. Set secrets
 
-Edit `k8s/secret.yml` and replace the placeholder value:
+Edit `k8s/secret.yml` and replace the placeholder values:
 
 ```yaml
 stringData:
   SESSION_SECRET: "your-secret-here"
+  PGPASSWORD: "your-db-password-here"
 ```
 
-### 2. Push the image to a registry
+### 2. Build and push the image
 
 ```bash
-podman tag simpleshop:latest <your-registry>/simpleshop:latest
+podman build -t <your-registry>/simpleshop:latest .
 podman push <your-registry>/simpleshop:latest
 ```
 
@@ -155,18 +178,6 @@ image: <your-registry>/simpleshop:latest
 ```
 
 ### 4. Create the registry pull secret
-
-The pull secret must be created locally and never committed to version control, as it contains registry credentials.
-
-If you are logged into the registry via Podman, reuse the existing auth file:
-
-```bash
-kubectl create secret generic quay-pull-secret \
-  --from-file=.dockerconfigjson=${XDG_RUNTIME_DIR}/containers/auth.json \
-  --type=kubernetes.io/dockerconfigjson
-```
-
-Otherwise, create it from credentials directly:
 
 ```bash
 kubectl create secret docker-registry quay-pull-secret \
@@ -181,7 +192,7 @@ kubectl create secret docker-registry quay-pull-secret \
 kubectl apply -f k8s/
 ```
 
-This creates the Session Secret, Deployment, and ClusterIP Service.
+This creates the PostgreSQL database (with a 1 Gi PersistentVolumeClaim), the app Deployment, and both ClusterIP Services.
 
 ### 6. Access the app
 
@@ -257,7 +268,7 @@ Edit CSS variables in `styles.css`:
 
 - **Vanilla JS frontend** — no framework, no bundler
 - **User authentication** — bcrypt password hashing, session-based login, 401 interception opens login modal
-- **SQLite persistence** — users, cart, wishlist, and orders survive server restarts; WAL mode enabled for write performance
+- **PostgreSQL persistence** — users, cart, wishlist, and orders survive server restarts; schema created automatically on startup
 - **Express backend** with `express-session`; cart and wishlist keyed by `user_id`
 - **Server-side filtering** — search, category, price, and sort all handled by the API
 - **Event delegation** — efficient DOM event handling on product grid, cart, and wishlist

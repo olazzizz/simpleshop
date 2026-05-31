@@ -27,6 +27,19 @@ spec:
                 secretKeyRef:
                   name: simpleshop-secret
                   key: SESSION_SECRET
+            - name: PGHOST
+              value: postgres
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              value: simpleshop
+            - name: PGUSER
+              value: simpleshop
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: simpleshop-secret
+                  key: PGPASSWORD
           readinessProbe:
             httpGet:
               path: /api/products

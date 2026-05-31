@@ -2,8 +2,7 @@ const express = require('express');
 const session = require('express-session');
 const path = require('path');
 
-require('./db/database');
-
+const { init } = require('./db/database');
 const requireAuth = require('./middleware/requireAuth');
 const app = express();
 
@@ -24,7 +23,18 @@ app.use('/api/cart',     requireAuth, require('./routes/cart'));
 app.use('/api/wishlist', requireAuth, require('./routes/wishlist'));
 app.use('/api/checkout', requireAuth, require('./routes/checkout'));
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`SimpleShop running at http://localhost:${PORT}`);
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal server error' });
 });
+
+const PORT = process.env.PORT || 3000;
+
+init()
+  .then(() => {
+    app.listen(PORT, () => console.log(`SimpleShop running at http://localhost:${PORT}`));
+  })
+  .catch(err => {
+    console.error('Failed to initialize database:', err);
+    process.exit(1);
+  });

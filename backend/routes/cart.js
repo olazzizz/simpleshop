@@ -1,73 +1,81 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db/database');
-
-const getProduct     = db.prepare('SELECT * FROM products WHERE id = ?');
-const getCartItems   = db.prepare('SELECT product_id, quantity FROM cart_items WHERE user_id = ?');
-const upsertCartItem = db.prepare(`
-  INSERT INTO cart_items (user_id, product_id, quantity)
-  VALUES (?, ?, ?)
-  ON CONFLICT(user_id, product_id) DO UPDATE SET quantity = excluded.quantity
-`);
-const deleteCartItem = db.prepare('DELETE FROM cart_items WHERE user_id = ? AND product_id = ?');
-const clearCart      = db.prepare('DELETE FROM cart_items WHERE user_id = ?');
+const { query } = require('../db/database');
 
 function discountedPrice(p) {
   return p.price * (1 - p.discount / 100);
 }
 
-function buildCartResponse(userId) {
-  const rows = getCartItems.all(userId);
-  const items = rows.map(row => {
-    const product = getProduct.get(row.product_id);
+async function buildCartResponse(userId) {
+  const rows = (await query('SELECT product_id, quantity FROM cart_items WHERE user_id = $1', [userId])).rows;
+  const items = (await Promise.all(rows.map(async row => {
+    const product = (await query('SELECT * FROM products WHERE id = $1', [row.product_id])).rows[0];
     if (!product) return null;
     const unitPrice = discountedPrice(product);
     return { product, quantity: row.quantity, unitPrice, subtotal: unitPrice * row.quantity };
-  }).filter(Boolean);
+  }))).filter(Boolean);
 
   const count = items.reduce((s, i) => s + i.quantity, 0);
   const total = items.reduce((s, i) => s + i.subtotal, 0);
   return { items, count, total };
 }
 
-router.get('/', (req, res) => {
-  res.json(buildCartResponse(req.session.userId));
+router.get('/', async (req, res, next) => {
+  try {
+    res.json(await buildCartResponse(req.session.userId));
+  } catch (err) { next(err); }
 });
 
-router.post('/', (req, res) => {
-  const { productId } = req.body;
-  const product = getProduct.get(+productId);
-  if (!product) return res.status(404).json({ error: 'Product not found' });
+router.post('/', async (req, res, next) => {
+  try {
+    const { productId } = req.body;
+    const product = (await query('SELECT * FROM products WHERE id = $1', [+productId])).rows[0];
+    if (!product) return res.status(404).json({ error: 'Product not found' });
 
-  const existing = db.prepare('SELECT quantity FROM cart_items WHERE user_id = ? AND product_id = ?')
-    .get(req.session.userId, +productId);
-  const newQty = (existing ? existing.quantity : 0) + 1;
-  upsertCartItem.run(req.session.userId, +productId, newQty);
+    const existing = (await query(
+      'SELECT quantity FROM cart_items WHERE user_id = $1 AND product_id = $2',
+      [req.session.userId, +productId]
+    )).rows[0];
+    const newQty = (existing ? existing.quantity : 0) + 1;
+    await query(`
+      INSERT INTO cart_items (user_id, product_id, quantity) VALUES ($1, $2, $3)
+      ON CONFLICT (user_id, product_id) DO UPDATE SET quantity = EXCLUDED.quantity
+    `, [req.session.userId, +productId, newQty]);
 
-  res.json(buildCartResponse(req.session.userId));
+    res.json(await buildCartResponse(req.session.userId));
+  } catch (err) { next(err); }
 });
 
-router.put('/:productId', (req, res) => {
-  const productId = +req.params.productId;
-  const { quantity } = req.body;
+router.put('/:productId', async (req, res, next) => {
+  try {
+    const productId = +req.params.productId;
+    const { quantity } = req.body;
 
-  if (quantity <= 0) {
-    deleteCartItem.run(req.session.userId, productId);
-  } else {
-    upsertCartItem.run(req.session.userId, productId, quantity);
-  }
+    if (quantity <= 0) {
+      await query('DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2', [req.session.userId, productId]);
+    } else {
+      await query(`
+        INSERT INTO cart_items (user_id, product_id, quantity) VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, product_id) DO UPDATE SET quantity = EXCLUDED.quantity
+      `, [req.session.userId, productId, quantity]);
+    }
 
-  res.json(buildCartResponse(req.session.userId));
+    res.json(await buildCartResponse(req.session.userId));
+  } catch (err) { next(err); }
 });
 
-router.delete('/:productId', (req, res) => {
-  deleteCartItem.run(req.session.userId, +req.params.productId);
-  res.json(buildCartResponse(req.session.userId));
+router.delete('/:productId', async (req, res, next) => {
+  try {
+    await query('DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2', [req.session.userId, +req.params.productId]);
+    res.json(await buildCartResponse(req.session.userId));
+  } catch (err) { next(err); }
 });
 
-router.delete('/', (req, res) => {
-  clearCart.run(req.session.userId);
-  res.json(buildCartResponse(req.session.userId));
+router.delete('/', async (req, res, next) => {
+  try {
+    await query('DELETE FROM cart_items WHERE user_id = $1', [req.session.userId]);
+    res.json(await buildCartResponse(req.session.userId));
+  } catch (err) { next(err); }
 });
 
 module.exports = router;

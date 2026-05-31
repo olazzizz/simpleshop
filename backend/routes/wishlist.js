@@ -1,36 +1,46 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db/database');
+const { query } = require('../db/database');
 
-const getProduct         = db.prepare('SELECT * FROM products WHERE id = ?');
-const getWishlist        = db.prepare('SELECT product_id FROM wishlist_items WHERE user_id = ?');
-const addToWishlist      = db.prepare('INSERT OR IGNORE INTO wishlist_items (user_id, product_id) VALUES (?, ?)');
-const removeFromWishlist = db.prepare('DELETE FROM wishlist_items WHERE user_id = ? AND product_id = ?');
-const isInWishlist       = db.prepare('SELECT 1 FROM wishlist_items WHERE user_id = ? AND product_id = ?');
-
-router.get('/', (req, res) => {
-  const rows = getWishlist.all(req.session.userId);
-  const items = rows.map(r => getProduct.get(r.product_id)).filter(Boolean);
-  res.json(items);
+router.get('/', async (req, res, next) => {
+  try {
+    const rows = (await query('SELECT product_id FROM wishlist_items WHERE user_id = $1', [req.session.userId])).rows;
+    const items = (await Promise.all(
+      rows.map(r => query('SELECT * FROM products WHERE id = $1', [r.product_id]))
+    )).map(r => r.rows[0]).filter(Boolean);
+    res.json(items);
+  } catch (err) { next(err); }
 });
 
-router.post('/:productId', (req, res) => {
-  const id = +req.params.productId;
-  if (!getProduct.get(id)) {
-    return res.status(404).json({ error: 'Product not found' });
-  }
+router.post('/:productId', async (req, res, next) => {
+  try {
+    const id = +req.params.productId;
+    if (!(await query('SELECT id FROM products WHERE id = $1', [id])).rows[0]) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
 
-  let inWishlist;
-  if (isInWishlist.get(req.session.userId, id)) {
-    removeFromWishlist.run(req.session.userId, id);
-    inWishlist = false;
-  } else {
-    addToWishlist.run(req.session.userId, id);
-    inWishlist = true;
-  }
+    const inWl = (await query(
+      'SELECT 1 FROM wishlist_items WHERE user_id = $1 AND product_id = $2',
+      [req.session.userId, id]
+    )).rows[0];
 
-  const wishlistIds = getWishlist.all(req.session.userId).map(r => r.product_id);
-  res.json({ inWishlist, wishlistIds });
+    let inWishlist;
+    if (inWl) {
+      await query('DELETE FROM wishlist_items WHERE user_id = $1 AND product_id = $2', [req.session.userId, id]);
+      inWishlist = false;
+    } else {
+      await query(
+        'INSERT INTO wishlist_items (user_id, product_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [req.session.userId, id]
+      );
+      inWishlist = true;
+    }
+
+    const wishlistIds = (await query(
+      'SELECT product_id FROM wishlist_items WHERE user_id = $1', [req.session.userId]
+    )).rows.map(r => r.product_id);
+    res.json({ inWishlist, wishlistIds });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;
