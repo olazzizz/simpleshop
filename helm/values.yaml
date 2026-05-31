@@ -1,0 +1,52 @@
+replicaCount: 1
+
+image:
+  repository: quay.io/rh-ee-olazzizz/simpleshop
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: quay-pull-secret
+
+sessionSecret: "change-me-in-production"
+
+service:
+  port: 80
+  targetPort: 3000
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+postgresql:
+  enabled: true
+  image: postgres:16
+  database: simpleshop
+  user: simpleshop
+  password: "change-me-in-production"
+  storage: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # daily at 02:00
+  retention: 7            # days to keep backups on the PVC
+  storage: 5Gi
+
+# Used when postgresql.enabled is false
+externalPostgresql:
+  host: ""
+  port: 5432
+  database: simpleshop
+  user: simpleshop
+  password: ""

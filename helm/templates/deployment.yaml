@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "simpleshop.name" . }}
+  labels:
+    {{- include "simpleshop.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "simpleshop.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "simpleshop.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: simpleshop
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "simpleshop.name" . }}
+                  key: SESSION_SECRET
+            - name: PGHOST
+              value: {{ include "simpleshop.pgHost" . | quote }}
+            - name: PGPORT
+              value: {{ include "simpleshop.pgPort" . | quote }}
+            - name: PGDATABASE
+              value: {{ include "simpleshop.pgDatabase" . | quote }}
+            - name: PGUSER
+              value: {{ include "simpleshop.pgUser" . | quote }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "simpleshop.name" . }}
+                  key: PGPASSWORD
+          readinessProbe:
+            httpGet:
+              path: /api/products
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

@@ -1,0 +1,49 @@
+{{- if and .Values.backup.enabled .Values.postgresql.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-backup
+  labels:
+    {{- include "simpleshop.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: pg-dump
+              image: {{ .Values.postgresql.image }}
+              env:
+                - name: PGHOST
+                  value: {{ include "simpleshop.postgresName" . | trim }}
+                - name: PGPORT
+                  value: "5432"
+                - name: PGDATABASE
+                  value: {{ .Values.postgresql.database | quote }}
+                - name: PGUSER
+                  value: {{ .Values.postgresql.user | quote }}
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "simpleshop.name" . }}
+                      key: PGPASSWORD
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  FILENAME="/backups/simpleshop-$(date +%Y%m%d-%H%M%S).sql.gz"
+                  pg_dump | gzip > "$FILENAME"
+                  echo "Backup written to $FILENAME"
+                  find /backups -name "*.sql.gz" -mtime +{{ .Values.backup.retention }} -delete
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: {{ .Release.Name }}-backups
+{{- end }}

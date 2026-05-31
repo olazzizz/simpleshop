@@ -1,0 +1,16 @@
+{{- if and .Values.backup.enabled .Values.postgresql.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-backups
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "simpleshop.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.backup.storage }}
+{{- end }}

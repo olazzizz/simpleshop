@@ -104,6 +104,22 @@ The backend serves both the API and the frontend static files — no separate fr
 │   ├── service.yml         # ClusterIP Service (port 80 → 3000)
 │   ├── postgres.yml        # PostgreSQL Deployment, PVC, and ClusterIP Service
 │   └── secret.yml          # SESSION_SECRET and PGPASSWORD
+├── helm/
+│   ├── Chart.yaml
+│   ├── values.yaml         # Default values (no real secrets)
+│   └── templates/
+│       ├── _helpers.tpl               # Named template helpers
+│       ├── secret.yaml
+│       ├── deployment.yaml
+│       ├── service.yaml
+│       ├── postgres-deployment.yaml
+│       ├── postgres-service.yaml
+│       ├── postgres-pvc.yaml
+│       ├── backup-cronjob.yaml        # Scheduled pg_dump CronJob
+│       └── backup-pvc.yaml            # PVC for in-cluster backup storage
+├── scripts/
+│   ├── db-backup.sh        # On-demand backup: triggers in-cluster job + downloads locally
+│   └── db-restore.sh       # Restore database from a local backup file
 └── README.md
 ```
 
@@ -152,7 +168,87 @@ Visit `http://localhost:3000` (requires a PostgreSQL instance accessible at `hos
 
 ## Kubernetes Deployment
 
-### 1. Set secrets
+Two deployment methods are available: **Helm** (recommended) or raw manifests.
+
+### Helm
+
+The Helm chart lives in `helm/` and deploys the app together with a PostgreSQL instance. Secret values are passed at install time and never need to be committed.
+
+#### Prerequisites
+
+- [Helm 3](https://helm.sh/docs/intro/install/)
+- A registry pull secret for the app image
+
+#### 1. Create the registry pull secret
+
+```bash
+kubectl create secret docker-registry quay-pull-secret \
+  --docker-server=<your-registry> \
+  --docker-username=<your-username> \
+  --docker-password=<your-password-or-token>
+```
+
+#### 2. Install the chart
+
+```bash
+helm install simpleshop ./helm \
+  --set sessionSecret=<your-session-secret> \
+  --set postgresql.password=<your-db-password>
+```
+
+To override the image:
+
+```bash
+helm install simpleshop ./helm \
+  --set image.repository=<your-registry>/simpleshop \
+  --set image.tag=latest \
+  --set sessionSecret=<your-session-secret> \
+  --set postgresql.password=<your-db-password>
+```
+
+#### 3. Access the app
+
+```bash
+kubectl port-forward service/simpleshop 3000:80
+```
+
+Visit `http://localhost:3000`.
+
+#### Upgrade after changes
+
+```bash
+helm upgrade simpleshop ./helm \
+  --set sessionSecret=<your-session-secret> \
+  --set postgresql.password=<your-db-password>
+```
+
+#### Uninstall
+
+```bash
+helm uninstall simpleshop
+```
+
+#### Using an external PostgreSQL
+
+To connect to an existing PostgreSQL instance instead of deploying one:
+
+```bash
+helm install simpleshop ./helm \
+  --set postgresql.enabled=false \
+  --set externalPostgresql.host=<host> \
+  --set externalPostgresql.user=<user> \
+  --set externalPostgresql.password=<password> \
+  --set externalPostgresql.database=<database> \
+  --set sessionSecret=<your-session-secret>
+```
+
+---
+
+### Raw manifests
+
+The `k8s/` directory contains plain Kubernetes manifests for direct `kubectl` use.
+
+#### 1. Set secrets
 
 Edit `k8s/secret.yml` and replace the placeholder values:
 
@@ -162,22 +258,18 @@ stringData:
   PGPASSWORD: "your-db-password-here"
 ```
 
-### 2. Build and push the image
+#### 2. Build and push the image
 
 ```bash
 podman build -t <your-registry>/simpleshop:latest .
 podman push <your-registry>/simpleshop:latest
 ```
 
-### 3. Update the image reference
+#### 3. Update the image reference
 
-In `k8s/deployment.yml`, set the `image` field to match your registry:
+In `k8s/deployment.yml`, set the `image` field to match your registry.
 
-```yaml
-image: <your-registry>/simpleshop:latest
-```
-
-### 4. Create the registry pull secret
+#### 4. Create the registry pull secret
 
 ```bash
 kubectl create secret docker-registry quay-pull-secret \
@@ -186,21 +278,81 @@ kubectl create secret docker-registry quay-pull-secret \
   --docker-password=<your-password-or-token>
 ```
 
-### 5. Apply the manifests
+#### 5. Apply the manifests
 
 ```bash
 kubectl apply -f k8s/
 ```
 
-This creates the PostgreSQL database (with a 1 Gi PersistentVolumeClaim), the app Deployment, and both ClusterIP Services.
-
-### 6. Access the app
+#### 6. Access the app
 
 ```bash
 kubectl port-forward service/simpleshop 3000:80
 ```
 
 Visit `http://localhost:3000`.
+
+## Database Backup & Restore
+
+### How it works
+
+Two layers of backup are in place when the Helm chart is deployed:
+
+| Layer | Mechanism | Survives `helm uninstall` | Survives cluster wipe |
+|-------|-----------|:---:|:---:|
+| In-cluster | CronJob → backups PVC | Yes (PVC is kept) | Depends on storage backend |
+| Local | `scripts/db-backup.sh` download | Yes | Yes |
+
+The CronJob runs `pg_dump` daily at 02:00, writes a timestamped `.sql.gz` to a dedicated `simpleshop-backups` PVC, and removes files older than 7 days. Both the data PVC and the backups PVC are annotated with `helm.sh/resource-policy: keep` so they are never deleted by Helm.
+
+### On-demand backup
+
+Run from the project root:
+
+```bash
+./scripts/db-backup.sh [release-name]
+```
+
+This will:
+1. Prompt for confirmation to start the backup immediately
+2. Trigger a one-off Kubernetes Job from the CronJob (writes to the in-cluster backups PVC)
+3. Download a copy to your local machine as `simpleshop-backup-YYYYMMDD-HHMMSS.sql.gz`
+
+Always run this before wiping a cluster or migrating to a new one.
+
+### Tune the schedule
+
+Override the default schedule and retention via Helm values:
+
+```bash
+helm upgrade simpleshop ./helm \
+  --set backup.schedule="0 3 * * *" \   # run at 03:00 instead
+  --set backup.retention=14 \            # keep 14 days instead of 7
+  --set sessionSecret=<secret> \
+  --set postgresql.password=<password>
+```
+
+### Restore
+
+```bash
+./scripts/db-restore.sh simpleshop-backup-YYYYMMDD-HHMMSS.sql.gz [release-name]
+```
+
+This will prompt for confirmation, then pipe the backup file into `psql` on the running postgres pod, overwriting existing data.
+
+### Cluster migration flow
+
+```bash
+# 1. Download a fresh backup before touching the cluster
+./scripts/db-backup.sh
+
+# 2. Tear down and/or stand up the new cluster
+helm uninstall simpleshop   # or wipe the cluster entirely
+helm install simpleshop ./helm --set sessionSecret=<s> --set postgresql.password=<p>
+
+# 3. Restore data into the new cluster
+./scripts/db-restore.sh simpleshop-backup-YYYYMMDD-HHMMSS.sql.gz
+```
 
 ## API Reference
 
