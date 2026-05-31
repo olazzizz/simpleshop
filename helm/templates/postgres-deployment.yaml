@@ -21,6 +21,17 @@ spec:
           ports:
             - containerPort: 5432
           env:
+            {{- if .Values.openshift.enabled }}
+            - name: POSTGRESQL_DATABASE
+              value: {{ .Values.postgresql.database | quote }}
+            - name: POSTGRESQL_USER
+              value: {{ .Values.postgresql.user | quote }}
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "simpleshop.name" . }}
+                  key: PGPASSWORD
+            {{- else }}
             - name: POSTGRES_DB
               value: {{ .Values.postgresql.database | quote }}
             - name: POSTGRES_USER
@@ -30,9 +41,10 @@ spec:
                 secretKeyRef:
                   name: {{ include "simpleshop.name" . }}
                   key: PGPASSWORD
+            {{- end }}
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql/data
+              mountPath: {{ if .Values.openshift.enabled }}/var/lib/pgsql/data{{ else }}/var/lib/postgresql/data{{ end }}
           resources:
             {{- toYaml .Values.postgresql.resources | nindent 12 }}
       volumes:

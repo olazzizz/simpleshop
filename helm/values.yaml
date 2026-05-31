@@ -37,6 +37,14 @@ postgresql:
       cpu: 500m
       memory: 512Mi
 
+serviceAccount:
+  name: simpleshop
+
+openshift:
+  enabled: false
+  route:
+    host: ""   # leave empty for auto-generated hostname
+
 backup:
   enabled: true
   schedule: "0 2 * * *"  # daily at 02:00

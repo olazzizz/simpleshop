@@ -1,0 +1,20 @@
+{{- if .Values.openshift.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "simpleshop.name" . }}
+  labels:
+    {{- include "simpleshop.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.openshift.route.host }}
+  host: {{ .Values.openshift.route.host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "simpleshop.name" . }}
+  port:
+    targetPort: {{ .Values.service.targetPort }}
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}

@@ -106,12 +106,14 @@ The backend serves both the API and the frontend static files — no separate fr
 │   └── secret.yml          # SESSION_SECRET and PGPASSWORD
 ├── helm/
 │   ├── Chart.yaml
-│   ├── values.yaml         # Default values (no real secrets)
+│   ├── values.yaml                  # Default values (no real secrets)
+│   ├── values-openshift-dev.yaml    # OpenShift dev environment overlay
 │   └── templates/
 │       ├── _helpers.tpl               # Named template helpers
 │       ├── secret.yaml
 │       ├── deployment.yaml
 │       ├── service.yaml
+│       ├── route.yaml                 # OpenShift Route (enabled via openshift.enabled)
 │       ├── postgres-deployment.yaml
 │       ├── postgres-service.yaml
 │       ├── postgres-pvc.yaml
@@ -185,7 +187,7 @@ The Helm chart lives in `helm/` and deploys the app together with a PostgreSQL i
 kubectl create secret docker-registry quay-pull-secret \
   --docker-server=<your-registry> \
   --docker-username=<your-username> \
-  --docker-password=<your-password-or-token>
+  --docker-password='<your-password-or-token>'
 ```
 
 #### 2. Install the chart
@@ -244,6 +246,74 @@ helm install simpleshop ./helm \
 
 ---
 
+### OpenShift
+
+The chart has first-class OpenShift support via the `values-openshift-dev.yaml` overlay, which:
+
+- Switches the PostgreSQL image to `registry.redhat.io/rhel9/postgresql-16` (supports OpenShift's arbitrary UID assignment and uses `POSTGRESQL_*` env vars)
+- Creates an edge-terminated **Route** for external HTTPS access (auto-generated hostname)
+
+#### Prerequisites
+
+- `oc` CLI logged in to your OpenShift cluster
+- Pull secret for `quay.io` (app image)
+- Pull secret for `registry.redhat.io` (PostgreSQL image) — link it to the default service account after creation
+
+#### 1. Create the project and pull secrets
+
+```bash
+oc new-project simpleshop-dev
+
+# App image pull secret
+kubectl create secret docker-registry quay-pull-secret \
+  --docker-server=quay.io \
+  --docker-username=<your-username> \
+  --docker-password='<your-token>'
+
+# Red Hat registry pull secret
+kubectl create secret docker-registry rh-registry-secret \
+  --docker-server=registry.redhat.io \
+  --docker-username=<your-rh-username> \
+  --docker-password='<your-rh-token>'
+
+# Link both secrets to the simpleshop service account (created by the chart)
+# Run helm install first, then link — or pre-create the service account
+oc secrets link simpleshop quay-pull-secret --for=pull -n simpleshop-dev
+oc secrets link simpleshop rh-registry-secret --for=pull -n simpleshop-dev
+```
+
+#### 2. Install the chart
+
+```bash
+helm install simpleshop ./helm \
+  -f helm/values-openshift-dev.yaml \
+  --namespace simpleshop-dev \
+  --set sessionSecret=<your-session-secret> \
+  --set postgresql.password=<your-db-password>
+```
+
+#### 3. Access the app
+
+OpenShift automatically assigns a public hostname to the Route:
+
+```bash
+oc get route simpleshop -n simpleshop-dev
+```
+
+The `HOST/PORT` column shows the URL — open it in a browser (HTTPS, redirects from HTTP).
+
+#### Upgrade
+
+```bash
+helm upgrade simpleshop ./helm \
+  -f helm/values-openshift-dev.yaml \
+  --namespace simpleshop-dev \
+  --set sessionSecret=<your-session-secret> \
+  --set postgresql.password=<your-db-password>
+```
+
+---
+
 ### Raw manifests
 
 The `k8s/` directory contains plain Kubernetes manifests for direct `kubectl` use.
@@ -275,7 +345,7 @@ In `k8s/deployment.yml`, set the `image` field to match your registry.
 kubectl create secret docker-registry quay-pull-secret \
   --docker-server=<your-registry> \
   --docker-username=<your-username> \
-  --docker-password=<your-password-or-token>
+  --docker-password='<your-password-or-token>'
 ```
 
 #### 5. Apply the manifests
