@@ -5,3 +5,6 @@ openshift:
 
 postgresql:
   image: registry.redhat.io/rhel9/postgresql-16
+
+otel:
+  enabled: true

@@ -45,6 +45,13 @@ openshift:
   route:
     host: ""   # leave empty for auto-generated hostname
 
+otel:
+  enabled: false
+  collector:
+    mode: deployment
+  tempo:
+    storage: 10Gi
+
 backup:
   enabled: true
   schedule: "0 2 * * *"  # daily at 02:00

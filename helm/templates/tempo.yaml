@@ -1,0 +1,22 @@
+{{- if .Values.otel.enabled }}
+apiVersion: tempo.grafana.com/v1alpha1
+kind: TempoMonolithic
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "simpleshop.labels" . | nindent 4 }}
+spec:
+  storage:
+    traces:
+      backend: pv
+      pv:
+        size: {{ .Values.otel.tempo.storage }}
+  ingestion:
+    otlp:
+      grpc:
+        enabled: true
+      http:
+        enabled: true
+  jaegerui:
+    enabled: true
+{{- end }}

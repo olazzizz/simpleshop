@@ -1,0 +1,18 @@
+{{- if .Values.otel.enabled }}
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "simpleshop.labels" . | nindent 4 }}
+spec:
+  exporter:
+    endpoint: http://{{ .Release.Name }}-collector:4318
+  propagators:
+    - tracecontext
+    - baggage
+  nodejs:
+    env:
+      - name: OTEL_SERVICE_NAME
+        value: {{ .Release.Name }}
+{{- end }}

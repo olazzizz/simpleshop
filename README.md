@@ -118,7 +118,10 @@ The backend serves both the API and the frontend static files — no separate fr
 │       ├── postgres-service.yaml
 │       ├── postgres-pvc.yaml
 │       ├── backup-cronjob.yaml        # Scheduled pg_dump CronJob
-│       └── backup-pvc.yaml            # PVC for in-cluster backup storage
+│       ├── backup-pvc.yaml            # PVC for in-cluster backup storage
+│       ├── tempo.yaml                 # TempoMonolithic CR (otel.enabled)
+│       ├── otel-collector.yaml        # OpenTelemetryCollector CR (otel.enabled)
+│       └── otel-instrumentation.yaml  # Instrumentation CR for Node.js (otel.enabled)
 ├── scripts/
 │   ├── db-backup.sh        # On-demand backup: triggers in-cluster job + downloads locally
 │   └── db-restore.sh       # Restore database from a local backup file
@@ -311,6 +314,90 @@ helm upgrade simpleshop ./helm \
   --set sessionSecret=<your-session-secret> \
   --set postgresql.password=<your-db-password>
 ```
+
+---
+
+### Observability (OpenTelemetry + Tempo)
+
+The Helm chart includes full distributed tracing support for OpenShift via the OpenTelemetry and Tempo operators. It is enabled by default in `values-openshift-dev.yaml`.
+
+#### How it works
+
+```
+simpleshop pod
+  └── OTel auto-instrumentation (injected by operator)
+        └── OTLP HTTP → simpleshop-collector:4318
+              └── OTLP gRPC → tempo-simpleshop:4317 (TempoMonolithic)
+                    └── Jaeger UI (built-in)
+```
+
+The `Instrumentation` CR tells the OpenTelemetry Operator to inject the Node.js auto-instrumentation agent as an init container into the app pod — no code changes required.
+
+#### Prerequisites: install the operators
+
+Install both operators cluster-wide from OperatorHub (requires cluster-admin):
+
+```bash
+# Red Hat build of OpenTelemetry operator
+oc apply -f - <<EOF
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: opentelemetry-product
+  namespace: openshift-operators
+spec:
+  channel: stable
+  name: opentelemetry-product
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+EOF
+
+# Tempo Operator
+oc apply -f - <<EOF
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: tempo-product
+  namespace: openshift-operators
+spec:
+  channel: stable
+  name: tempo-product
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+EOF
+```
+
+Wait for both operators to reach `Succeeded` before installing the chart:
+
+```bash
+oc get csv -n openshift-operators -w
+```
+
+#### Deploy with observability
+
+```bash
+helm upgrade --install simpleshop ./helm \
+  -f helm/values-openshift-dev.yaml \
+  --namespace simpleshop-dev \
+  --set sessionSecret=<your-session-secret> \
+  --set postgresql.password=<your-db-password>
+```
+
+The chart creates:
+- `TempoMonolithic` CR — single-binary Tempo instance backed by a 10 Gi PVC with the Jaeger-compatible UI enabled
+- `OpenTelemetryCollector` CR — receives OTLP from the app and forwards to Tempo
+- `Instrumentation` CR — configures Node.js auto-instrumentation for the app pod
+
+#### Access the Tempo / Jaeger UI
+
+The Tempo operator creates the service but not the Route. Expose it once manually:
+
+```bash
+oc expose svc tempo-simpleshop-jaegerui --port=16686 -n simpleshop-dev
+oc get route tempo-simpleshop-jaegerui -n simpleshop-dev
+```
+
+Open the URL, select **`simpleshop`** as the service, and click **Find Traces**.
 
 ---
 

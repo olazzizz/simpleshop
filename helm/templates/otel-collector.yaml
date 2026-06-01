@@ -1,0 +1,28 @@
+{{- if .Values.otel.enabled }}
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "simpleshop.labels" . | nindent 4 }}
+spec:
+  mode: {{ .Values.otel.collector.mode }}
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    exporters:
+      otlp/tempo:
+        endpoint: tempo-{{ .Release.Name }}:4317
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [otlp/tempo]
+{{- end }}

@@ -13,6 +13,10 @@ spec:
     metadata:
       labels:
         {{- include "simpleshop.selectorLabels" . | nindent 8 }}
+      {{- if .Values.otel.enabled }}
+      annotations:
+        instrumentation.opentelemetry.io/inject-nodejs: "true"
+      {{- end }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
       {{- with .Values.imagePullSecrets }}
