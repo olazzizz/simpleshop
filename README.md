@@ -234,9 +234,6 @@ for NS in simpleshop-dev simpleshop-prod; do
     --docker-username=<your-rh-username> \
     --docker-password='<your-rh-token>' \
     -n $NS
-
-  oc secrets link simpleshop quay-pull-secret --for=pull -n $NS
-  oc secrets link simpleshop rh-registry-secret --for=pull -n $NS
 done
 ```
 
@@ -248,6 +245,16 @@ kustomize build --enable-helm kustomize/overlays/dev | oc apply -f -
 
 # Prod
 kustomize build --enable-helm kustomize/overlays/prod | oc apply -f -
+```
+
+**4. Link pull secrets to the service account** (after first deploy, which creates the service account):
+
+```bash
+for NS in simpleshop-dev simpleshop-prod; do
+  oc secrets link simpleshop quay-pull-secret --for=pull -n $NS
+  oc secrets link simpleshop rh-registry-secret --for=pull -n $NS
+  oc rollout restart deployment/simpleshop -n $NS
+done
 ```
 
 **Preview without applying:**
