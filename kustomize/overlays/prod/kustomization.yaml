@@ -3,16 +3,18 @@ kind: Kustomization
 
 namespace: simpleshop-prod
 
+helmGlobals:
+  chartHome: ../../..
+
 helmCharts:
-  - name: simpleshop
+  - name: helm
     releaseName: simpleshop
-    chartPath: ../../../helm
     valuesFile: values.yaml
     includeCRDs: true
 
 secretGenerator:
   - name: simpleshop
-    behavior: replace
+    behavior: create
     options:
       disableNameSuffixHash: true
     envs:

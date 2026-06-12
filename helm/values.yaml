@@ -37,6 +37,9 @@ postgresql:
       cpu: 500m
       memory: 512Mi
 
+secret:
+  create: true
+
 serviceAccount:
   name: simpleshop
 

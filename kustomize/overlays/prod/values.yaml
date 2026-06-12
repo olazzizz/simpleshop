@@ -1,4 +1,7 @@
 replicaCount: 2
+secret:
+  create: false   # secret is managed by kustomize secretGenerator
+
 sessionSecret: "placeholder"   # overridden by secrets.env
 postgresql:
   image: registry.redhat.io/rhel9/postgresql-16
