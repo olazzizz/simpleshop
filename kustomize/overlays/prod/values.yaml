@@ -10,7 +10,7 @@ openshift:
     host: ""
 
 otel:
-  enabled: false
+  enabled: true
 
 backup:
   enabled: true

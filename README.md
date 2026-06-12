@@ -189,7 +189,7 @@ Kustomize overlays in `kustomize/overlays/` manage the two environments. Each ov
 | Environment | Namespace | Replicas | OTel |
 |-------------|-----------|:--------:|:----:|
 | dev | `simpleshop-dev` | 1 | enabled |
-| prod | `simpleshop-prod` | 2 | disabled |
+| prod | `simpleshop-prod` | 2 | enabled |
 
 ### Prerequisites
 
