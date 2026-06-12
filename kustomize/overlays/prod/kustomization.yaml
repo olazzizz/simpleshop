@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: simpleshop-prod
+
+helmCharts:
+  - name: simpleshop
+    releaseName: simpleshop
+    chartPath: ../../../helm
+    valuesFile: values.yaml
+    includeCRDs: true
+
+secretGenerator:
+  - name: simpleshop
+    behavior: replace
+    options:
+      disableNameSuffixHash: true
+    envs:
+      - secrets.env

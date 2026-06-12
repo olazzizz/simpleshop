@@ -1,0 +1,12 @@
+sessionSecret: "placeholder"   # overridden by secrets.env
+postgresql:
+  image: registry.redhat.io/rhel9/postgresql-16
+  password: "placeholder"       # overridden by secrets.env
+
+openshift:
+  enabled: true
+  route:
+    host: ""
+
+otel:
+  enabled: true

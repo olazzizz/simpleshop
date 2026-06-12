@@ -104,6 +104,17 @@ The backend serves both the API and the frontend static files — no separate fr
 │   ├── service.yml         # ClusterIP Service (port 80 → 3000)
 │   ├── postgres.yml        # PostgreSQL Deployment, PVC, and ClusterIP Service
 │   └── secret.yml          # SESSION_SECRET and PGPASSWORD
+├── kustomize/
+│   ├── .gitignore              # ignores secrets.env files
+│   └── overlays/
+│       ├── dev/
+│       │   ├── kustomization.yaml   # namespace: simpleshop-dev, helmCharts ref, secretGenerator
+│       │   ├── values.yaml          # dev-specific Helm values (no secrets)
+│       │   └── secrets.env          # gitignored — SESSION_SECRET + PGPASSWORD
+│       └── prod/
+│           ├── kustomization.yaml   # namespace: simpleshop-prod, helmCharts ref, secretGenerator
+│           ├── values.yaml          # prod-specific Helm values: replicaCount 2, otel off
+│           └── secrets.env          # gitignored — SESSION_SECRET + PGPASSWORD
 ├── helm/
 │   ├── Chart.yaml
 │   ├── values.yaml                  # Default values (no real secrets)
@@ -170,6 +181,80 @@ podman run --rm -p 3000:3000 \
 ```
 
 Visit `http://localhost:3000` (requires a PostgreSQL instance accessible at `host.containers.internal:5432`).
+
+## Kustomize Environments
+
+Kustomize overlays in `kustomize/overlays/` manage the two environments. Each overlay references the Helm chart via `helmCharts` and injects secrets from a local gitignored file, so no secrets are ever committed.
+
+| Environment | Namespace | Replicas | OTel |
+|-------------|-----------|:--------:|:----:|
+| dev | `simpleshop-dev` | 1 | enabled |
+| prod | `simpleshop-prod` | 2 | disabled |
+
+### Prerequisites
+
+Kustomize v5+ with Helm support:
+
+```bash
+# Verify
+kustomize version   # must be v5+
+```
+
+### Deploy
+
+**1. Create the secrets file** (once per environment, never committed):
+
+```bash
+cat > kustomize/overlays/dev/secrets.env <<EOF
+SESSION_SECRET=your-dev-session-secret
+PGPASSWORD=your-dev-db-password
+EOF
+
+cat > kustomize/overlays/prod/secrets.env <<EOF
+SESSION_SECRET=your-prod-session-secret
+PGPASSWORD=your-prod-db-password
+EOF
+```
+
+**2. Create the projects and pull secrets** (once per cluster):
+
+```bash
+oc new-project simpleshop-dev
+oc new-project simpleshop-prod
+
+for NS in simpleshop-dev simpleshop-prod; do
+  kubectl create secret docker-registry quay-pull-secret \
+    --docker-server=quay.io \
+    --docker-username=<your-username> \
+    --docker-password='<your-token>' \
+    -n $NS
+
+  kubectl create secret docker-registry rh-registry-secret \
+    --docker-server=registry.redhat.io \
+    --docker-username=<your-rh-username> \
+    --docker-password='<your-rh-token>' \
+    -n $NS
+
+  oc secrets link simpleshop quay-pull-secret --for=pull -n $NS
+  oc secrets link simpleshop rh-registry-secret --for=pull -n $NS
+done
+```
+
+**3. Build and apply:**
+
+```bash
+# Dev
+kustomize build --enable-helm kustomize/overlays/dev | oc apply -f -
+
+# Prod
+kustomize build --enable-helm kustomize/overlays/prod | oc apply -f -
+```
+
+**Preview without applying:**
+
+```bash
+kustomize build --enable-helm kustomize/overlays/dev
+```
 
 ## Kubernetes Deployment
 
