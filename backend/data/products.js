@@ -11,6 +11,18 @@ const PRODUCTS = [
   { id: 10, name: "Phone Stand",         category: "Accessories",  desc: "Adjustable angle, premium aluminum. Non-slip feet.",               price: 14.99,  rating: 4.2, reviews: 78,  emoji: "📱", discount: 30 },
   { id: 11, name: "USB-C Cable",         category: "Connectivity", desc: "High-speed data transfer. 2m length, durable.",                   price: 9.99,   rating: 4.4, reviews: 203, emoji: "🔗", discount: 0  },
   { id: 12, name: "Wireless Mouse",      category: "Input",        desc: "Precision tracking, ergonomic design. 18-month battery.",          price: 44.99,  rating: 4.5, reviews: 389, emoji: "🖐️", discount: 18 },
+  { id: 13, name: "Noise-Cancelling Earbuds", category: "Audio",   desc: "Compact true wireless, adaptive ANC. 6-hour battery.",             price: 99.99,  rating: 4.6, reviews: 274, emoji: "🎵", discount: 10 },
+  { id: 14, name: "Ergonomic Keyboard",  category: "Input",        desc: "Split design, cushioned palm rest. Reduces wrist strain.",         price: 89.00,  rating: 4.5, reviews: 162, emoji: "⌨️", discount: 0  },
+  { id: 15, name: "Wireless Charging Pad", category: "Power",      desc: "15W fast charge, non-slip surface. Case-friendly.",                price: 24.99,  rating: 4.3, reviews: 198, emoji: "🔋", discount: 12 },
+  { id: 16, name: "Fitness Tracker Band", category: "Wearable",    desc: "Sleep tracking, step counter, 10-day battery.",                    price: 49.99,  rating: 4.4, reviews: 312, emoji: "⌚", discount: 20 },
+  { id: 17, name: "LED Strip Lights",    category: "Lighting",     desc: "16 million colors, app-controlled, 5m roll.",                      price: 22.99,  rating: 4.5, reviews: 401, emoji: "💡", discount: 15 },
+  { id: 18, name: "Ring Light 10\"",     category: "Video",        desc: "Adjustable stand, 3 color modes. Great for streaming.",           price: 34.99,  rating: 4.4, reviews: 143, emoji: "📷", discount: 0  },
+  { id: 19, name: "Gaming Mouse Pad",    category: "Input",        desc: "Extended size, RGB edge lighting. Micro-woven surface.",           price: 29.99,  rating: 4.6, reviews: 176, emoji: "🖱️", discount: 10 },
+  { id: 20, name: "USB-C to HDMI Adapter", category: "Connectivity", desc: "4K@60Hz output, plug-and-play. Aluminum shell.",                 price: 19.99,  rating: 4.3, reviews: 224, emoji: "🔌", discount: 0  },
+  { id: 21, name: "Mini Bluetooth Speaker", category: "Audio",     desc: "Pocket-sized, 8-hour battery. Splash resistant.",                  price: 29.99,  rating: 4.5, reviews: 267, emoji: "🔊", discount: 5  },
+  { id: 22, name: "Laptop Stand",        category: "Accessories",  desc: "Foldable aluminum, adjustable height. Improves airflow.",          price: 27.99,  rating: 4.6, reviews: 189, emoji: "💻", discount: 20 },
+  { id: 23, name: "USB-C Multi Cable",   category: "Connectivity", desc: "3-in-1 charging cable: USB-C, Lightning, Micro-USB.",              price: 12.99,  rating: 4.2, reviews: 134, emoji: "🔗", discount: 0  },
+  { id: 24, name: "Vertical Mouse",      category: "Input",        desc: "Ergonomic grip, reduces forearm strain. Wireless.",                price: 39.99,  rating: 4.4, reviews: 152, emoji: "🖐️", discount: 8  },
 ];
 
 module.exports = PRODUCTS;
